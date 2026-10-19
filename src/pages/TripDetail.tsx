@@ -9,7 +9,7 @@ import { AppBar, Avatar, Check, ConfirmSheet, Empty, Fab, Money, Pill, Sheet, Sq
 import { navigate } from '../router';
 import { drawSettlementImage } from '../share/settlementImage';
 import { shareImage } from '../share/shareImage';
-import { addPayment, deleteContribution, deletePayment, tripLedger } from '../store/actions';
+import { addPayment, deleteContribution, deletePayment, tripLedger, upsertTrip } from '../store/actions';
 import { useStore } from '../store/AppStore';
 import { formatDate, newId, today } from '../utils';
 import { NotFound } from './TripForm';
@@ -272,6 +272,8 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
   const name = (id: string) => trip.members.find((m) => m.id === id)?.name ?? '?';
   const idx = (id: string) => trip.members.findIndex((m) => m.id === id);
   const isPool = trip.mode === 'pool';
+  const rounding = trip.rounding ?? 'yuan';
+  const setRounding = (r: 'yuan' | 'cent') => update((d) => upsertTrip(d, { ...trip, rounding: r }));
 
   const markPaid = (t: Transfer) => {
     update((d) => addPayment(d, { id: newId(), tripId: trip.id, fromId: t.fromId, toId: t.toId, amount: t.amount, date: today(), createdAt: Date.now() }));
@@ -340,6 +342,18 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
       </p>
 
       <div className="section-title">轉帳清單{isPool && '（都透過保管人）'}</div>
+      <div className="seg" style={{ marginBottom: 10 }}>
+        {(
+          [
+            ['yuan', '取整數元'],
+            ['cent', '到小數 2 位'],
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} className={rounding === k ? 'active' : ''} onClick={() => setRounding(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="list">
         {summary.transfers.length === 0 && payments.length === 0 && (
           <div className="all-clear">
@@ -378,7 +392,12 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
           </button>
         ))}
       </div>
-      {summary.transfers.length > 0 && <p className="note">還完錢後點一下該筆，標記為「已還款」。</p>}
+      {summary.transfers.length > 0 && (
+        <p className="note">
+          還完錢後點一下該筆，標記為「已還款」。
+          {rounding === 'yuan' && '金額已取整數元，每人和精確值相差不到 1 元。'}
+        </p>
+      )}
       {isPool && custodianRow && trip.custodianId && (
         <p className="note">
           公費餘額 NT$ {formatMoney(summary.poolBalance)} 在保管人 {name(trip.custodianId)} 手上
@@ -386,7 +405,8 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
         </p>
       )}
 
-      <div style={{ marginTop: 24 }}>
+      <div className="stack" style={{ marginTop: 24 }}>
+        <Pill block light label="查看計算公式" icon="receipt" tone="mustard" disabled={expenses.length === 0} onClick={() => navigate({ name: 'formula', tripId: trip.id })} />
         <Pill block label="產生結算圖片" icon="image" tone="blue" disabled={expenses.length === 0} onClick={makeImage} />
       </div>
 

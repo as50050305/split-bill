@@ -1,8 +1,8 @@
 /**
  * 核心資料型別。core/ 底下全部是純函式，不碰 UI、不碰儲存。
  *
- * 金額 Money 一律是「最小貨幣單位的整數」。TWD 的最小單位就是「元」，
- * 之後加多幣別時（例如 USD 以「分」為單位），只要在 Trip.currency 上換幣別即可。
+ * 金額 Money 一律是「分」（1/100 元）的整數：NT$ 333.33 存成 33333。
+ * 可以算到小數 2 位，又不會有浮點數誤差。
  */
 
 export type ID = string;
@@ -11,6 +11,8 @@ export type CurrencyCode = 'TWD';
 
 /** pool = 模式一 公費制；individual = 模式二 各自付款制 */
 export type TripMode = 'pool' | 'individual';
+
+export type Rounding = 'yuan' | 'cent';
 
 export type ExpenseKind = 'expense' | 'subsidy';
 
@@ -49,6 +51,8 @@ export interface Trip {
   members: TripMember[];
   /** 模式一的保管人 */
   custodianId?: ID;
+  /** 轉帳清單的金額：yuan＝取整數元（預設，方便實際轉帳）；cent＝顯示到小數 2 位 */
+  rounding?: Rounding;
   createdAt: number;
   updatedAt: number;
 }

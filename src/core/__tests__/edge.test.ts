@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeTripSummary,
+  roundPositionsToYuan,
   formatMoney,
+  sum,
   parseMoney,
   settleGreedy,
   splitExpense,
@@ -172,16 +174,24 @@ describe('結算', () => {
   });
 });
 
-describe('金額工具', () => {
-  it('parseMoney 只接受非負整數', () => {
-    expect(parseMoney('1,234')).toBe(1234);
-    expect(parseMoney('12.5')).toBeNull();
+describe('金額工具（以分為單位）', () => {
+  it('parseMoney 接受最多 2 位小數', () => {
+    expect(parseMoney('1,234')).toBe(123400);
+    expect(parseMoney('12.5')).toBe(1250);
+    expect(parseMoney('12.34')).toBe(1234);
+    expect(parseMoney('0.07')).toBe(7);
+    expect(parseMoney('12.345')).toBeNull();
     expect(parseMoney('-3')).toBeNull();
     expect(parseMoney('')).toBeNull();
   });
-  it('formatMoney 加千分位', () => {
-    expect(formatMoney(1234567)).toBe('1,234,567');
-    expect(formatMoney(-375)).toBe('-375');
+  it('formatMoney：整數元不顯示小數，有零頭才顯示', () => {
+    expect(formatMoney(123456700)).toBe('1,234,567');
+    expect(formatMoney(33333)).toBe('333.33');
+    expect(formatMoney(33330)).toBe('333.30');
+    expect(formatMoney(-37500)).toBe('-375');
+    expect(formatMoney(-5)).toBe('-0.05');
+    expect(formatMoney(100000, 'always')).toBe('1,000.00');
+    expect(formatMoney(33350, 'never')).toBe('334');
   });
 });
 
@@ -260,7 +270,73 @@ describe('多人付款與補貼', () => {
   });
 });
 
+describe('精確到分＋結算取整數元', () => {
+  it('9 人平分 30 筆 100 元：每人應付誤差不到 1 分，不再累積幾十元', () => {
+    const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+    const all = { type: 'equal' as const, participants: ids };
+    const s = computeTripSummary({
+      trip: trip('individual', ids, undefined, 'cent'),
+      expenses: Array.from({ length: 30 }, () => expense({ amount: 10000, payerId: 'A', split: all })),
+      contributions: [],
+      payments: [],
+    });
+    const owed = s.balances.map((b) => b.owed);
+    // 精確值 3000 / 9 = 333.333… 元；舊版（整數元）會變成 A~C 各 340、D~I 各 330，差 10 元
+    expect(Math.max(...owed) - Math.min(...owed)).toBeLessThanOrEqual(30);
+    expect(owed.reduce((a, b) => a + b, 0)).toBe(300000);
+  });
+
+  it('roundPositionsToYuan：總和仍為 0、每人誤差 < 1 元', () => {
+    const p = { A: 66667, B: -33333, C: -33334 };
+    const r = roundPositionsToYuan(p, ['A', 'B', 'C']);
+    expect(Object.values(r).reduce((a, b) => a + b, 0)).toBe(0);
+    for (const k of ['A', 'B', 'C'] as const) {
+      expect(Math.abs(r[k] % 100)).toBe(0);
+      expect(Math.abs(r[k] - p[k])).toBeLessThan(100);
+    }
+  });
+
+  it('轉帳清單：預設取整數元，切換 cent 時顯示到分', () => {
+    const all = { type: 'equal' as const, participants: ['A', 'B', 'C'] };
+    const base = {
+      expenses: [expense({ amount: 100000, payerId: 'A', split: all })], // 1000 元三人分
+      contributions: [],
+      payments: [],
+    };
+    const byYuan = computeTripSummary({ ...base, trip: trip('individual', ['A', 'B', 'C'], undefined, 'yuan') });
+    expect(byYuan.transfers.map((t) => t.amount)).toEqual([33300, 33300]);
+    const byCent = computeTripSummary({ ...base, trip: trip('individual', ['A', 'B', 'C'], undefined, 'cent') });
+    expect(byCent.transfers.map((t) => t.amount)).toEqual([33333, 33333]);
+  });
+
+  it('貪婪法步驟有記錄（給計算公式頁）', () => {
+    const all = { type: 'equal' as const, participants: ['A', 'B', 'C', 'D'] };
+    const s = computeTripSummary({
+      trip: trip('individual', ['A', 'B', 'C', 'D']),
+      expenses: [expense({ amount: 1000, payerId: 'A', split: all }), expense({ amount: 500, payerId: 'B', split: all })],
+      contributions: [],
+      payments: [],
+    });
+    expect(s.steps[0]).toEqual({ creditorId: 'A', creditorLeft: 625, debtorId: 'C', debtorLeft: 375, amount: 375 });
+    expect(s.steps).toHaveLength(3);
+  });
+});
+
 describe('資料升級', () => {
+  it('v2 → v3：所有金額 × 100（元 → 分）', async () => {
+    const { migrate } = await import('../../data/migrations');
+    const d = migrate({
+      schemaVersion: 2,
+      expenses: [{ id: 'e1', amount: 300, payers: { A: 200, B: 100 }, split: { type: 'exact', amounts: { A: 150, B: 150 } } }],
+      contributions: [{ id: 'c1', amount: 1000 }],
+      payments: [{ id: 'p1', amount: 50 }],
+    });
+    expect(d.schemaVersion).toBe(3);
+    expect(d.expenses[0]).toMatchObject({ amount: 30000, payers: { A: 20000, B: 10000 }, split: { amounts: { A: 15000, B: 15000 } } });
+    expect(d.contributions[0].amount).toBe(100000);
+    expect(d.payments[0].amount).toBe(5000);
+  });
+
   it('舊版 payerId 自動轉成 payers', async () => {
     const { migrate } = await import('../../data/migrations');
     const d = migrate({
@@ -270,9 +346,26 @@ describe('資料升級', () => {
         { id: 'e2', amount: 100 },
       ],
     });
-    expect(d.schemaVersion).toBe(2);
-    expect(d.expenses[0]).toMatchObject({ payers: { A: 300 }, kind: 'expense' });
+    expect(d.schemaVersion).toBe(3);
+    expect(d.expenses[0]).toMatchObject({ payers: { A: 30000 }, kind: 'expense' });
     expect(d.expenses[0]).not.toHaveProperty('payerId');
     expect(d.expenses[1]).toMatchObject({ payers: {} });
+  });
+});
+
+describe('計算公式說明', () => {
+  it('平均：100 元 ÷ 3 人顯示算式與零頭說明', async () => {
+    const { explainSplit } = await import('../explain');
+    const ex = explainSplit(expense({ amount: 10000, payerId: 'A', split: { type: 'equal', participants: ['A', 'B', 'C'] } }), ['A', 'B', 'C'], (id) => id);
+    expect(ex.formula).toBe('100 ÷ 3 人 = 33.3333…');
+    expect(ex.rows.map((r) => r.value)).toEqual([3334, 3333, 3333]);
+    expect(ex.note).toContain('A 各多 0.01');
+  });
+  it('份數：0.5 / 1 / 2 份', async () => {
+    const { explainSplit } = await import('../explain');
+    const ex = explainSplit(expense({ amount: 10000, payerId: 'A', split: { type: 'shares', shares: { A: 0.5, B: 1, C: 2 } } }), ['A', 'B', 'C'], (id) => id);
+    expect(ex.formula).toBe('共 3.5 份，每份 100 ÷ 3.5 = 28.5714…');
+    expect(ex.rows.map((r) => r.value)).toEqual([1429, 2857, 5714]);
+    expect(sum(ex.rows.map((r) => r.value))).toBe(10000);
   });
 });

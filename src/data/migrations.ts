@@ -20,6 +20,26 @@ const steps: { from: number; up: (d: any) => any }[] = [
       })),
     }),
   },
+  // v2 → v3：金額單位從「元」改成「分」（可算到小數 2 位），所有金額 × 100
+  {
+    from: 2,
+    up: (d) => {
+      const x = (n: unknown) => (typeof n === 'number' ? n * 100 : n);
+      const xs = (r: Record<string, number> = {}) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, x(v)]));
+      return {
+        ...d,
+        schemaVersion: 3,
+        expenses: (d.expenses ?? []).map((e: any) => ({
+          ...e,
+          amount: x(e.amount),
+          payers: xs(e.payers),
+          split: e.split?.type === 'exact' ? { ...e.split, amounts: xs(e.split.amounts) } : e.split,
+        })),
+        contributions: (d.contributions ?? []).map((c: any) => ({ ...c, amount: x(c.amount) })),
+        payments: (d.payments ?? []).map((p: any) => ({ ...p, amount: x(p.amount) })),
+      };
+    },
+  },
 ];
 
 export function migrate(raw: unknown): AppData {

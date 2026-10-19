@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
-import { formatMoney } from '../core/money';
+import { formatMoney, parseMoney, toInputString } from '../core/money';
 import { goBack, href } from '../router';
 import type { Route } from '../router';
 import { cx } from '../utils';
@@ -113,7 +113,10 @@ export function Money({ value, signed, className }: { value: number; signed?: bo
   return <span className={cx('num', tone, className)}>{text}</span>;
 }
 
-/** 整數金額輸入：只接受數字，顯示千分位 */
+/**
+ * 金額輸入（值以「分」為單位）。可輸入最多 2 位小數，顯示千分位。
+ * 內部保留使用者正在打的字（例如「12.」），外部值改變時才同步。
+ */
 export function MoneyInput({
   value,
   onChange,
@@ -131,19 +134,41 @@ export function MoneyInput({
   invalid?: boolean;
   ariaLabel?: string;
 }) {
+  const [text, setText] = useState(() => (value === null ? '' : toInputString(value)));
+  // 外部改了值（例如「差額補給」「改回平均」）→ 同步顯示
+  useEffect(() => {
+    const current = text === '' ? null : parseMoney(text);
+    if (current !== value) setText(value === null ? '' : toInputString(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const display = (() => {
+    if (text === '') return '';
+    const [int, frac] = text.split('.');
+    const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return frac === undefined ? grouped : `${grouped}.${frac}`;
+  })();
+
   return (
     <div className={cx('money-input', size)}>
       <span className="prefix">NT$</span>
       <input
         className={cx('input', invalid && 'error')}
-        inputMode="numeric"
+        inputMode="decimal"
         autoFocus={autoFocus}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        value={value === null ? '' : formatMoney(value)}
+        value={display}
         onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-          onChange(digits === '' ? null : Math.min(Number(digits), 1_000_000_000));
+          let raw = e.target.value.replace(/[^\d.]/g, '');
+          const dot = raw.indexOf('.');
+          if (dot >= 0) raw = raw.slice(0, dot + 1) + raw.slice(dot + 1).replace(/\./g, '').slice(0, 2);
+          raw = raw.replace(/^0+(?=\d)/, '');
+          if (raw.startsWith('.')) raw = '0' + raw;
+          const parsed = raw === '' ? null : parseMoney(raw);
+          if (raw !== '' && parsed === null) return; // 超過上限
+          setText(raw);
+          onChange(parsed);
         }}
         onFocus={(e) => e.target.select()}
       />

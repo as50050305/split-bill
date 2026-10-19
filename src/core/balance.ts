@@ -1,5 +1,6 @@
 import { sum } from './money';
-import { settleGreedy, settlePool } from './settle';
+import { roundPositionsToYuan, settleGreedy, settlePool } from './settle';
+import type { SettleStep } from './settle';
 import { splitExpense } from './split';
 import type { Contribution, Expense, ID, Money, Payment, Transfer, Trip } from './types';
 
@@ -30,10 +31,16 @@ export interface TripSummary {
   /** 模式一：目前公費餘額（投入 − 由公費支付的支出） */
   poolBalance: Money;
   totalContributed: Money;
+  /** 用來算轉帳的精確部位（分） */
+  positions: Record<ID, Money>;
+  /** 取整數元後的部位（rounding = yuan 時才有） */
+  roundedPositions?: Record<ID, Money>;
+  /** 各自付款制的貪婪法步驟 */
+  steps: SettleStep[];
 }
 
 export interface TripLedger {
-  trip: Pick<Trip, 'mode' | 'members' | 'custodianId'>;
+  trip: Pick<Trip, 'mode' | 'members' | 'custodianId' | 'rounding'>;
   expenses: Expense[];
   contributions: Contribution[];
   payments: Payment[];
@@ -101,9 +108,17 @@ export function computeTripSummary({ trip, expenses, contributions, payments }: 
     // 保管人手上握著公費餘額，那是大家的錢，所以他的部位要扣掉
     positions[custodian] -= poolBalance;
     row(custodian).position = positions[custodian];
-    transfers = settlePool(positions, custodian, order);
+  }
+
+  // 精確計算到「分」，只有最後轉帳才（可選）取整數元
+  const rounding = trip.rounding ?? 'yuan';
+  const roundedPositions = rounding === 'yuan' ? roundPositionsToYuan(positions, order) : undefined;
+  const settleOn = roundedPositions ?? positions;
+  const steps: SettleStep[] = [];
+  if (trip.mode === 'pool') {
+    transfers = settlePool(settleOn, trip.custodianId!, order);
   } else {
-    transfers = settleGreedy(positions, order);
+    transfers = settleGreedy(settleOn, order, steps);
   }
 
   return {
@@ -112,5 +127,8 @@ export function computeTripSummary({ trip, expenses, contributions, payments }: 
     totalExpense: sum(expenses.map((e) => e.amount)),
     poolBalance,
     totalContributed,
+    positions,
+    roundedPositions,
+    steps,
   };
 }

@@ -11,7 +11,8 @@ export type Route =
   | { name: 'trip'; tripId: string; tab: 'expenses' | 'pool' | 'settle' }
   | { name: 'expenseNew'; tripId: string }
   | { name: 'expenseEdit'; tripId: string; expenseId: string }
-  | { name: 'contributionNew'; tripId: string };
+  | { name: 'contributionNew'; tripId: string }
+  | { name: 'formula'; tripId: string };
 
 export function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -23,6 +24,7 @@ export function parse(hash: string): Route {
     if (c === 'expense' && d === 'new') return { name: 'expenseNew', tripId: b };
     if (c === 'expense' && d) return { name: 'expenseEdit', tripId: b, expenseId: d };
     if (c === 'contribution') return { name: 'contributionNew', tripId: b };
+    if (c === 'formula') return { name: 'formula', tripId: b };
     const tab = c === 'pool' || c === 'settle' ? c : 'expenses';
     return { name: 'trip', tripId: b, tab };
   }
@@ -47,6 +49,8 @@ export function href(r: Route): string {
       return `#/trip/${r.tripId}/expense/${r.expenseId}`;
     case 'contributionNew':
       return `#/trip/${r.tripId}/contribution`;
+    case 'formula':
+      return `#/trip/${r.tripId}/formula`;
   }
 }
 

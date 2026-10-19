@@ -1,6 +1,6 @@
 import type { Contribution, Expense, Group, Member, Payment, Trip } from '../core/types';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** 整個 App 的資料。v1 資料量小，整包存取即可 */
 export interface AppData {

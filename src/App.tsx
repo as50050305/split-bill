@@ -4,6 +4,7 @@ import { PreferencesRepository } from './data/preferencesRepo';
 import { ContributionForm } from './pages/ContributionForm';
 import { ExpenseForm } from './pages/ExpenseForm';
 import { Favorites } from './pages/Favorites';
+import { Formula } from './pages/Formula';
 import { TripDetail } from './pages/TripDetail';
 import { TripForm } from './pages/TripForm';
 import { TripList } from './pages/TripList';
@@ -29,6 +30,8 @@ function Screen() {
       return <ExpenseForm tripId={r.tripId} expenseId={r.expenseId} />;
     case 'contributionNew':
       return <ContributionForm tripId={r.tripId} />;
+    case 'formula':
+      return <Formula tripId={r.tripId} />;
   }
 }
 

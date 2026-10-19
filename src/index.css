@@ -322,3 +322,28 @@ button.row:active { background: var(--surface-2); }
 .preview-img { width: 100%; border-radius: 14px; border: 1px solid var(--border); display: block; margin-bottom: 16px; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(40px); opacity: 0.5; } }
+
+/* ── 計算公式頁 ─────────────────────── */
+.f-h { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; margin: 28px 2px 12px; }
+.f-step { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--ink); color: var(--ink-on); font-family: var(--font-num); font-size: 14px; }
+.f-card { display: flex; flex-direction: column; gap: 10px; }
+.f-card-head { display: flex; align-items: center; gap: 12px; }
+.f-card-head .grow { flex: 1; min-width: 0; }
+.f-title { font-weight: 800; font-size: 16px; }
+.f-sub { font-size: 13px; color: var(--muted); }
+.f-amt { font-weight: 800; font-size: 18px; white-space: nowrap; }
+.f-method { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--muted); margin-top: 4px; }
+.f-formula { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.f-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.f-rows li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.f-rows li:last-child { border-bottom: 0; }
+.f-rows .who { display: flex; align-items: center; gap: 8px; font-weight: 700; flex: 1; min-width: 96px; }
+.f-detail { font-size: 12px; color: var(--muted); }
+.f-val { font-weight: 800; min-width: 84px; text-align: right; }
+.f-note { font-size: 13px; color: var(--muted); margin: 0; }
+.f-break { display: flex; flex-direction: column; gap: 2px; }
+.f-break-head { display: flex; justify-content: space-between; font-weight: 800; font-size: 14px; padding-bottom: 4px; }
+.f-break-item { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); padding-left: 10px; }
+.f-break-sum { font-size: 12px; color: var(--faint); padding-left: 10px; overflow-wrap: anywhere; }
+.f-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.f-step-result { margin-top: 2px; font-weight: 600; }
