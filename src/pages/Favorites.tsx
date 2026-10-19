@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Group, Member } from '../core/types';
-import { AppBar, Avatar, BottomNav, ConfirmSheet, Fab, PromptSheet, Sheet, useToast } from '../components/ui';
+import { Icon } from '../components/icons';
+import { AppBar, Avatar, BottomNav, ConfirmSheet, Empty, Fab, Pill, PromptSheet, Sheet, Sq, useToast } from '../components/ui';
 import { addMember, deleteGroup, deleteMember, renameMember, upsertGroup } from '../store/actions';
 import { useStore } from '../store/AppStore';
 import { newId } from '../utils';
@@ -31,27 +32,17 @@ export function Favorites() {
       <main className="page with-tabs">
         {tab === 'members' &&
           (data.members.length === 0 ? (
-            <div className="empty">
-              <div className="big">👤</div>
-              <p>還沒有常用成員</p>
-              <p className="faint" style={{ fontSize: 14, marginTop: 4 }}>
-                把常一起出去的朋友加進來，建立旅程時一鍵勾選
-              </p>
-            </div>
+            <Empty icon="userPlus" tone="sage" title="還沒有常用成員" hint="把常一起出去的朋友加進來，建立旅程時一鍵勾選" />
           ) : (
             <div className="list">
               {data.members.map((m, i) => (
                 <div className="member-row" key={m.id}>
                   <Avatar name={m.name} index={i} />
-                  <button className="name" style={{ background: 'none', border: 0, textAlign: 'left', padding: '12px 0' }} onClick={() => setRenaming(m)}>
+                  <button className="name" onClick={() => setRenaming(m)}>
                     {m.name}
                   </button>
-                  <button className="icon-btn" aria-label="改名" onClick={() => setRenaming(m)}>
-                    ✏️
-                  </button>
-                  <button className="icon-btn" aria-label="刪除" onClick={() => setDeleting(m)}>
-                    🗑️
-                  </button>
+                  <Sq icon="edit" label="改名" small onClick={() => setRenaming(m)} />
+                  <Sq icon="trash" label="刪除" small onClick={() => setDeleting(m)} />
                 </div>
               ))}
             </div>
@@ -59,25 +50,23 @@ export function Favorites() {
 
         {tab === 'groups' &&
           (data.groups.length === 0 ? (
-            <div className="empty">
-              <div className="big">👥</div>
-              <p>還沒有常用群組</p>
-              <p className="faint" style={{ fontSize: 14, marginTop: 4 }}>
-                例如「大學死黨 5 人組」，建立旅程時一鍵帶入
-              </p>
-            </div>
+            <Empty icon="users" tone="lilac" title="還沒有常用群組" hint="例如「大學死黨 5 人組」，建立旅程時一鍵帶入" />
           ) : (
             <div className="list">
               {data.groups.map((g) => (
                 <button className="row" key={g.id} onClick={() => setEditingGroup(g)}>
-                  <span className="cat-icon">👥</span>
+                  <span className="tile tone-lilac">
+                    <Icon name="users" />
+                  </span>
                   <div className="grow">
                     <div className="title">{g.name}</div>
                     <div className="sub">
                       {g.memberIds.length} 人 · {g.memberIds.map(nameOf).filter(Boolean).join('、') || '（沒有成員）'}
                     </div>
                   </div>
-                  <span className="faint">›</span>
+                  <span className="faint" style={{ transform: 'rotate(180deg)' }}>
+                    <Icon name="back" size={18} />
+                  </span>
                 </button>
               ))}
             </div>
@@ -85,9 +74,9 @@ export function Favorites() {
       </main>
 
       {tab === 'members' ? (
-        <Fab label="新增成員" onClick={() => setAdding(true)} />
+        <Fab label="新增成員" icon="userPlus" onClick={() => setAdding(true)} />
       ) : (
-        <Fab label="新增群組" onClick={() => setEditingGroup({ id: newId(), name: '', memberIds: [] })} />
+        <Fab label="新增群組" icon="users" tone="blue" onClick={() => setEditingGroup({ id: newId(), name: '', memberIds: [] })} />
       )}
       <BottomNav active="favorites" />
 
@@ -187,7 +176,7 @@ function GroupEditor({
           <div className="chips">
             {members.map((m) => (
               <button key={m.id} className={ids.includes(m.id) ? 'chip on' : 'chip'} onClick={() => toggle(m.id)}>
-                {ids.includes(m.id) && '✓ '}
+                {ids.includes(m.id) && <Icon name="check" size={16} />}
                 {m.name}
               </button>
             ))}
@@ -209,16 +198,16 @@ function GroupEditor({
         </div>
       </div>
       <div className="stack">
-        <button
-          className="btn primary block lg"
+        <Pill
+          block
+          label="儲存群組"
+          icon="check"
           disabled={!ok}
           onClick={() => {
             onSave({ ...group, name: name.trim(), memberIds: ids });
             onClose();
           }}
-        >
-          儲存群組
-        </button>
+        />
         {!isNew && (
           <button className="btn danger block" onClick={() => setConfirm(true)}>
             刪除群組

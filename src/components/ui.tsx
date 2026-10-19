@@ -1,17 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { formatMoney } from '../core/money';
 import { goBack, href } from '../router';
 import type { Route } from '../router';
 import { cx } from '../utils';
+import { Icon } from './icons';
+import type { IconName } from './icons';
 
 export function AppBar({
   title,
+  eyebrow,
   back,
   actions,
   children,
 }: {
   title: string;
+  eyebrow?: string;
   back?: Route | true;
   actions?: ReactNode;
   children?: ReactNode;
@@ -19,12 +23,11 @@ export function AppBar({
   return (
     <header className="appbar">
       <div className="appbar-row">
-        {back && (
-          <button className="icon-btn" aria-label="返回" onClick={() => goBack(back === true ? undefined : back)}>
-            ←
-          </button>
-        )}
-        <h1>{title}</h1>
+        {back && <Sq icon="back" label="返回" onClick={() => goBack(back === true ? undefined : back)} />}
+        <h1>
+          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
+          {title}
+        </h1>
         {actions}
       </div>
       {children}
@@ -36,22 +39,72 @@ export function BottomNav({ active }: { active: 'trips' | 'favorites' }) {
   return (
     <nav className="bottom-nav">
       <a href={href({ name: 'trips' })} className={cx(active === 'trips' && 'active')}>
-        🧳 旅程
+        <Icon name="suitcase" size={20} /> 旅程
       </a>
       <a href={href({ name: 'favorites' })} className={cx(active === 'favorites' && 'active')}>
-        👥 常用名單
+        <Icon name="users" size={20} /> 常用名單
       </a>
     </nav>
   );
 }
 
-export function Fab({ label, onClick, noNav }: { label: string; onClick: () => void; noNav?: boolean }) {
+/** 斜切雙色膠囊按鈕：左邊墨色文字、右邊莫蘭迪色塊放圖示 */
+export function Pill({
+  label,
+  icon = 'plus',
+  tone,
+  light,
+  block,
+  disabled,
+  className,
+  onClick,
+}: {
+  label: string;
+  icon?: IconName;
+  tone?: 'rose' | 'blue' | 'clay' | 'mustard';
+  light?: boolean;
+  block?: boolean;
+  disabled?: boolean;
+  className?: string;
+  onClick: () => void;
+}) {
   return (
-    <button className={cx('fab', noNav && 'no-nav')} onClick={onClick}>
-      <span className="plus">＋</span>
-      {label}
+    <button className={cx('pill', tone, light && 'light', block && 'block', className)} disabled={disabled} onClick={onClick}>
+      <span className="pill-label">{label}</span>
+      <span className="pill-icon">
+        <Icon name={icon} size={24} />
+      </span>
     </button>
   );
+}
+
+/** 方形圖示按鈕 */
+export function Sq({
+  icon,
+  label,
+  tone,
+  small,
+  flat,
+  disabled,
+  onClick,
+}: {
+  icon: IconName;
+  label: string;
+  tone?: 'ink' | 'rose' | 'blue' | 'sage';
+  small?: boolean;
+  flat?: boolean;
+  disabled?: boolean;
+  onClick: (e: MouseEvent) => void;
+}) {
+  return (
+    <button className={cx('sq', tone, small && 'sm', flat && 'flat')} aria-label={label} title={label} disabled={disabled} onClick={onClick}>
+      <Icon name={icon} size={small ? 18 : 20} />
+    </button>
+  );
+}
+
+export function Fab({ label, icon, tone, onClick, noNav }: { label: string; icon?: IconName; tone?: 'rose' | 'blue' | 'clay' | 'mustard'; onClick: () => void; noNav?: boolean }) {
+  return <Pill className={cx('fab', noNav && 'no-nav')} label={label} icon={icon} tone={tone} onClick={onClick} />;
 }
 
 export function Money({ value, signed, className }: { value: number; signed?: boolean; className?: string }) {
@@ -98,18 +151,25 @@ export function MoneyInput({
   );
 }
 
-const AVATAR_COLORS = ['#3ddc97', '#6cb6ff', '#ffbf5f', '#ff8fb1', '#b59cff', '#5fe0e0', '#ff9a6b', '#c4e05f'];
-export function Avatar({ name, index }: { name: string; index: number }) {
-  return (
-    <span className="avatar" style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}>
-      {[...name.trim()][0] ?? '?'}
-    </span>
-  );
+const TONES = ['sage', 'rose', 'blue', 'clay', 'lilac', 'mustard', 'olive'];
+export function Avatar({ name, index, small }: { name: string; index: number; small?: boolean }) {
+  return <span className={cx('avatar', `tone-${TONES[Math.max(0, index) % TONES.length]}`, small && 'sm')}>{[...name.trim()][0] ?? '?'}</span>;
 }
-export const avatarColor = (i: number) => AVATAR_COLORS[i % AVATAR_COLORS.length];
 
 export function Check({ on, round }: { on: boolean; round?: boolean }) {
-  return <span className={cx('check', on && 'on', round && 'round-check')}>{on ? '✓' : ''}</span>;
+  return <span className={cx('check', on && 'on', round && 'round-check')}>{on && <Icon name="check" size={16} />}</span>;
+}
+
+export function Empty({ icon, tone = 'olive', title, hint }: { icon: IconName; tone?: string; title: string; hint?: string }) {
+  return (
+    <div className="empty">
+      <span className={cx('tile', `tone-${tone}`)}>
+        <Icon name={icon} size={30} />
+      </span>
+      <p style={{ fontWeight: 700, color: 'var(--text)' }}>{title}</p>
+      {hint && <p className="faint" style={{ fontSize: 14 }}>{hint}</p>}
+    </div>
+  );
 }
 
 export function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {

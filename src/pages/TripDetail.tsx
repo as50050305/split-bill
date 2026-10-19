@@ -4,7 +4,8 @@ import type { TripSummary } from '../core/balance';
 import { categoryOf } from '../core/categories';
 import { formatMoney, sum } from '../core/money';
 import type { Contribution, Expense, Payment, Transfer, Trip } from '../core/types';
-import { AppBar, Avatar, Check, ConfirmSheet, Fab, Money, Sheet, useToast } from '../components/ui';
+import { Icon } from '../components/icons';
+import { AppBar, Avatar, Check, ConfirmSheet, Empty, Fab, Money, Pill, Sheet, Sq, useToast } from '../components/ui';
 import { navigate } from '../router';
 import { drawSettlementImage } from '../share/settlementImage';
 import { shareImage } from '../share/shareImage';
@@ -48,11 +49,10 @@ export function TripDetail({ tripId, tab }: { tripId: string; tab: Tab }) {
     <>
       <AppBar
         title={trip.name}
+        eyebrow={trip.mode === 'pool' ? 'Pool · 公費制' : 'Split · 各自付款'}
         back={{ name: 'trips' }}
         actions={
-          <button className="icon-btn" aria-label="編輯旅程" onClick={() => navigate({ name: 'tripEdit', tripId })}>
-            ⚙️
-          </button>
+          <Sq icon="sliders" label="編輯旅程" tone="ink" onClick={() => navigate({ name: 'tripEdit', tripId })} />
         }
       >
         <div className="tabs">
@@ -65,7 +65,7 @@ export function TripDetail({ tripId, tab }: { tripId: string; tab: Tab }) {
       </AppBar>
       <main className="page with-tabs">
         {!summary ? (
-          <div className="empty">資料有誤，無法計算。請檢查最近修改的支出。</div>
+          <Empty icon="receipt" tone="rose" title="資料有誤，無法計算" hint="請檢查最近修改的支出" />
         ) : activeTab === 'expenses' ? (
           <ExpensesTab trip={trip} expenses={ledger.expenses} summary={summary} />
         ) : activeTab === 'pool' ? (
@@ -75,7 +75,7 @@ export function TripDetail({ tripId, tab }: { tripId: string; tab: Tab }) {
         )}
       </main>
       {activeTab === 'expenses' && <Fab noNav label="記一筆" onClick={() => navigate({ name: 'expenseNew', tripId })} />}
-      {activeTab === 'pool' && <Fab noNav label="投入公費" onClick={() => navigate({ name: 'contributionNew', tripId })} />}
+      {activeTab === 'pool' && <Fab noNav label="投入公費" icon="coins" tone="clay" onClick={() => navigate({ name: 'contributionNew', tripId })} />}
     </>
   );
 }
@@ -108,11 +108,14 @@ function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expens
 
   return (
     <>
-      <div className="card hero">
+      <div className="hero">
         {trip.mode === 'pool' ? (
           <>
             <div className="label">公費餘額</div>
-            <div className={summary.poolBalance < 0 ? 'value neg' : 'value'}>NT$ {formatMoney(summary.poolBalance)}</div>
+            <div className="value">
+              <small>NT$</small>
+              {formatMoney(summary.poolBalance)}
+            </div>
             <div className="hero-grid">
               <div>
                 <div className="label">總支出</div>
@@ -124,15 +127,16 @@ function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expens
               </div>
             </div>
             {summary.poolBalance < 0 && (
-              <p className="neg" style={{ fontSize: 14, marginTop: 10 }}>
-                公費不夠了！請到「公費」分頁投入，或把支出標成某人代墊。
-              </p>
+              <p className="warn">公費不夠了。請到「公費」分頁投入，或把支出標成某人代墊。</p>
             )}
           </>
         ) : (
           <>
             <div className="label">總支出</div>
-            <div className="value">NT$ {formatMoney(summary.totalExpense)}</div>
+            <div className="value">
+              <small>NT$</small>
+              {formatMoney(summary.totalExpense)}
+            </div>
             <div className="hero-grid">
               <div>
                 <div className="label">筆數</div>
@@ -148,24 +152,20 @@ function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expens
       </div>
 
       {byDate.length === 0 ? (
-        <div className="empty">
-          <div className="big">🧾</div>
-          <p>還沒有支出</p>
-          <p className="faint" style={{ fontSize: 14, marginTop: 4 }}>
-            按右下角「記一筆」新增
-          </p>
-        </div>
+        <Empty icon="receipt" tone="clay" title="還沒有支出" hint="按右下角「記一筆」新增" />
       ) : (
         byDate.map((g) => (
           <section key={g.date}>
-            <div className="section-title stat">
+            <div className="section-title">
               <span>{formatDate(g.date)}</span>
               <span className="num">{formatMoney(sum(g.items.map((e) => e.amount)))}</span>
             </div>
             <div className="list">
               {g.items.map((e) => (
                 <button key={e.id} className="row" onClick={() => navigate({ name: 'expenseEdit', tripId: trip.id, expenseId: e.id })}>
-                  <span className="cat-icon">{categoryOf(e.categoryId).icon}</span>
+                  <span className={`tile tone-${categoryOf(e.categoryId).tone}`}>
+                    <Icon name={e.categoryId} />
+                  </span>
                   <div className="grow">
                     <div className="title">{e.title}</div>
                     <div className="sub">
@@ -192,9 +192,12 @@ function PoolTab({ trip, contributions, summary }: { trip: Trip; contributions: 
 
   return (
     <>
-      <div className="card hero">
-        <div className="label">公費餘額（在 {trip.custodianId ? name(trip.custodianId) : '保管人'} 手上）</div>
-        <div className={summary.poolBalance < 0 ? 'value neg' : 'value'}>NT$ {formatMoney(summary.poolBalance)}</div>
+      <div className="hero">
+        <div className="label">公費餘額 · 在 {trip.custodianId ? name(trip.custodianId) : '保管人'} 手上</div>
+        <div className="value">
+          <small>NT$</small>
+          {formatMoney(summary.poolBalance)}
+        </div>
         <div className="hero-grid">
           <div>
             <div className="label">已投入</div>
@@ -215,7 +218,7 @@ function PoolTab({ trip, contributions, summary }: { trip: Trip; contributions: 
             <div className="grow">
               <div className="title">
                 {name(b.memberId)}
-                {b.memberId === trip.custodianId && ' 💰'}
+                {b.memberId === trip.custodianId && <span className="badge" style={{ marginLeft: 8 }}>保管人</span>}
               </div>
               {b.advanced > 0 && <div className="sub">另代墊 {formatMoney(b.advanced)}</div>}
             </div>
@@ -238,9 +241,7 @@ function PoolTab({ trip, contributions, summary }: { trip: Trip; contributions: 
                 <div className="sub">{formatDate(c.date)}</div>
               </div>
               <span className="amount">{formatMoney(c.amount)}</span>
-              <button className="icon-btn" aria-label="刪除" onClick={() => setDeleting(c)}>
-                🗑️
-              </button>
+              <Sq icon="trash" label="刪除" small onClick={() => setDeleting(c)} />
             </div>
           ))}
         </div>
@@ -277,8 +278,10 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
   const dates = expenses.map((e) => e.date).sort();
   const dateRange = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} ~ ${dates[dates.length - 1]}`).replaceAll('-', '/') : undefined;
 
-  const makeImage = () => {
+  const makeImage = async () => {
     try {
+      // 等數字字型載入完成再畫，避免圖片用到替代字型
+      await document.fonts?.load('800 40px "Manrope Variable"').catch(() => undefined);
       setImage(drawSettlementImage({ trip, summary, payments, dateRange }));
     } catch (e) {
       toast('產生圖片失敗');
@@ -317,7 +320,7 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
               <tr key={b.memberId}>
                 <td>
                   {name(b.memberId)}
-                  {isPool && b.memberId === trip.custodianId && ' 💰'}
+                  {isPool && b.memberId === trip.custodianId && <span className="badge" style={{ marginLeft: 6 }}>保管</span>}
                 </td>
                 <td>{formatMoney(b.paid)}</td>
                 <td>{formatMoney(b.owed)}</td>
@@ -337,7 +340,9 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
       <div className="list">
         {summary.transfers.length === 0 && payments.length === 0 && (
           <div className="all-clear">
-            <div className="big">🎉</div>
+            <span className="tile tone-sage">
+              <Icon name="sparkle" />
+            </span>
             <p>{expenses.length ? '不需要轉帳，大家剛好打平' : '還沒有支出'}</p>
           </div>
         )}
@@ -345,15 +350,15 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
           <button key={`t${i}`} className="transfer" onClick={() => markPaid(t)}>
             <Check on={false} />
             <span className="flow">
-              <Avatar name={name(t.fromId)} index={idx(t.fromId)} />
+              <Avatar name={name(t.fromId)} index={idx(t.fromId)} small />
               {name(t.fromId)}
-              <span className="arrow">→</span>
-              <Avatar name={name(t.toId)} index={idx(t.toId)} />
+              <span className="arrow">
+                <Icon name="arrowRight" size={18} />
+              </span>
+              <Avatar name={name(t.toId)} index={idx(t.toId)} small />
               {name(t.toId)}
             </span>
-            <span className="amount num" style={{ fontWeight: 800, fontSize: 18, color: 'var(--accent)' }}>
-              {formatMoney(t.amount)}
-            </span>
+            <span className="amount">{formatMoney(t.amount)}</span>
           </button>
         ))}
         {payments.map((p) => (
@@ -361,12 +366,12 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
             <Check on />
             <span className="flow">
               {name(p.fromId)}
-              <span className="arrow">→</span>
+              <span className="arrow">
+                <Icon name="arrowRight" size={18} />
+              </span>
               {name(p.toId)}
             </span>
-            <span className="amount num" style={{ fontWeight: 700 }}>
-              {formatMoney(p.amount)}
-            </span>
+            <span className="amount">{formatMoney(p.amount)}</span>
           </button>
         ))}
       </div>
@@ -378,10 +383,8 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
         </p>
       )}
 
-      <div style={{ marginTop: 20 }}>
-        <button className="btn primary block lg" disabled={expenses.length === 0} onClick={makeImage}>
-          🖼️ 產生結算圖片
-        </button>
+      <div style={{ marginTop: 24 }}>
+        <Pill block label="產生結算圖片" icon="image" tone="blue" disabled={expenses.length === 0} onClick={makeImage} />
       </div>
 
       {image && (
@@ -389,12 +392,10 @@ function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary:
           <h2>結算圖片</h2>
           <img className="preview-img" src={image} alt="結算圖片預覽" style={{ marginTop: 12 }} />
           <div className="btn-row">
-            <button className="btn ghost lg" onClick={() => setImage(null)}>
+            <button className="btn ghost lg" style={{ flex: '0 0 96px' }} onClick={() => setImage(null)}>
               關閉
             </button>
-            <button className="btn primary lg" onClick={share}>
-              分享（LINE）
-            </button>
+            <Pill label="分享到 LINE" icon="share" tone="blue" onClick={share} />
           </div>
         </Sheet>
       )}

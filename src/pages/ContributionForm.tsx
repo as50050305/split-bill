@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatMoney } from '../core/money';
-import { AppBar, Avatar, Check, MoneyInput, useToast } from '../components/ui';
+import { AppBar, Avatar, Check, MoneyInput, Pill, useToast } from '../components/ui';
 import { goBack } from '../router';
 import { addContributions } from '../store/actions';
 import { useStore } from '../store/AppStore';
@@ -52,8 +52,7 @@ export function ContributionForm({ tripId }: { tripId: string }) {
           </p>
           <div className="list">
             <button
-              className="split-row"
-              style={{ width: '100%', background: 'var(--surface-2)', border: 0, minHeight: 52 }}
+              className="split-row head"
               onClick={() => setWho(allOn ? new Set() : new Set(trip.members.map((m) => m.id)))}
             >
               <span className="who" style={{ fontSize: 15, padding: 0 }}>
@@ -65,7 +64,7 @@ export function ContributionForm({ tripId }: { tripId: string }) {
               <div key={m.id} className="split-row">
                 <button className="who" onClick={() => toggle(m.id)}>
                   <Check on={who.has(m.id)} />
-                  <Avatar name={m.name} index={i} />
+                  <Avatar name={m.name} index={i} small />
                   <span>
                     {m.name}
                     {m.id === trip.custodianId && <span className="faint" style={{ fontSize: 13 }}> · 保管人</span>}
@@ -86,9 +85,7 @@ export function ContributionForm({ tripId }: { tripId: string }) {
             共 {who.size} 人 × {formatMoney(amount!)} = NT$ {formatMoney(amount! * who.size)}
           </p>
         )}
-        <button className="btn primary block lg" disabled={!ok} onClick={save}>
-          記錄投入
-        </button>
+        <Pill block label="記錄投入" icon="coins" tone="clay" disabled={!ok} onClick={save} />
       </div>
     </>
   );

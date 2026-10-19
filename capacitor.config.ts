@@ -4,11 +4,10 @@ const config: CapacitorConfig = {
   appId: 'tw.yushengzhe.splitbill',
   appName: '分帳本',
   webDir: 'dist',
-  backgroundColor: '#0e1116',
   plugins: {
     SystemBars: {
-      // 深色背景配淺色狀態列文字；畫面延伸到狀態列下方，由 CSS 的 safe-area 留白
-      style: 'DARK',
+      // 狀態列文字顏色跟隨手機淺深色；畫面延伸到狀態列下方，由 CSS 的 safe-area 留白
+      style: 'DEFAULT',
       insetsHandling: 'css',
       initialViewportFitValueHint: 'cover',
     },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Trip, TripMember, TripMode } from '../core/types';
-import { AppBar, Avatar, Check, PromptSheet, useToast } from '../components/ui';
+import { Icon } from '../components/icons';
+import { AppBar, Avatar, Check, Empty, Pill, PromptSheet, Sq, useToast } from '../components/ui';
 import { goBack, navigate } from '../router';
 import { addMember, isTripMemberUsed, tripHasRecords, upsertTrip } from '../store/actions';
 import { useStore } from '../store/AppStore';
@@ -126,6 +127,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 active={mode === 'individual'}
                 disabled={locked}
                 title="各自付款制"
+                icon="users"
                 desc="每筆由不同人付錢，最後算出誰該轉給誰（最少轉帳次數）"
                 onClick={() => setMode('individual')}
               />
@@ -133,6 +135,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 active={mode === 'pool'}
                 disabled={locked}
                 title="公費制"
+                icon="wallet"
                 desc="大家先把錢交給一位保管人，花費從公費扣，最後由保管人多退少補"
                 onClick={() => setMode('pool')}
               />
@@ -146,18 +149,12 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 {members.map((m, i) => (
                   <div className="member-row" key={m.id}>
                     <Avatar name={m.name} index={i} />
-                    <button className="name" style={{ background: 'none', border: 0, textAlign: 'left', padding: '10px 0' }} onClick={() => setRenaming(m)}>
+                    <button className="name" onClick={() => setRenaming(m)}>
                       {m.name}
                       {pendingFav.has(m.id) && <span className="faint" style={{ fontSize: 13 }}> · 將存入常用</span>}
                     </button>
-                    {i > 0 && (
-                      <button className="icon-btn" aria-label="上移" onClick={() => moveUp(i)}>
-                        ↑
-                      </button>
-                    )}
-                    <button className="icon-btn" aria-label="移除" onClick={() => removeMember(m)} style={{ opacity: used(m.id) ? 0.3 : 1 }}>
-                      ✕
-                    </button>
+                    {i > 0 && <Sq icon="up" label="上移" small onClick={() => moveUp(i)} />}
+                    <Sq icon="close" label="移除" small disabled={used(m.id)} onClick={() => removeMember(m)} />
                   </div>
                 ))}
               </div>
@@ -170,7 +167,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
               <div className="chips">
                 {data.groups.map((g) => (
                   <button key={g.id} className="chip dashed" onClick={() => addGroup(g.memberIds)}>
-                    👥 {g.name}（{g.memberIds.length}）
+                    <Icon name="users" size={18} /> {g.name}（{g.memberIds.length}）
                   </button>
                 ))}
               </div>
@@ -185,7 +182,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                   const on = members.some((m) => m.savedMemberId === f.id);
                   return (
                     <button key={f.id} className={on ? 'chip on' : 'chip'} onClick={() => toggleFavorite(f.id, f.name)}>
-                      {on && '✓ '}
+                      {on && <Icon name="check" size={16} />}
                       {f.name}
                     </button>
                   );
@@ -210,11 +207,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 加入
               </button>
             </div>
-            <button
-              className="row"
-              style={{ minHeight: 48, padding: '4px', border: 0 }}
-              onClick={() => setSaveTemp((v) => !v)}
-            >
+            <button className="toggle-row" onClick={() => setSaveTemp((v) => !v)}>
               <Check on={saveTemp} />
               <span>同時存入常用成員</span>
             </button>
@@ -229,7 +222,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
                 <div className="chips">
                   {members.map((m) => (
                     <button key={m.id} className={custodianId === m.id ? 'chip on' : 'chip'} onClick={() => setCustodianId(m.id)}>
-                      {custodianId === m.id && '💰 '}
+                      {custodianId === m.id && <Icon name="wallet" size={18} />}
                       {m.name}
                     </button>
                   ))}
@@ -242,9 +235,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
       <div className="sticky-actions">
         {problems.length > 0 && <p className="hint muted">{problems[0]}</p>}
-        <button className="btn primary block lg" disabled={problems.length > 0} onClick={save}>
-          {existing ? '儲存變更' : '建立旅程'}
-        </button>
+        <Pill block label={existing ? '儲存變更' : '建立旅程'} icon="check" disabled={problems.length > 0} onClick={save} />
       </div>
 
       {renaming && (
@@ -262,25 +253,15 @@ export function TripForm({ tripId }: { tripId?: string }) {
   );
 }
 
-function ModeOption(p: { active: boolean; disabled: boolean; title: string; desc: string; onClick: () => void }) {
+function ModeOption(p: { active: boolean; disabled: boolean; title: string; desc: string; icon: 'users' | 'wallet'; onClick: () => void }) {
   return (
-    <button
-      className={cx('card', 'row')}
-      disabled={p.disabled && !p.active}
-      style={{
-        borderColor: p.active ? 'var(--accent)' : undefined,
-        background: p.active ? 'var(--accent-soft)' : undefined,
-        opacity: p.disabled && !p.active ? 0.4 : 1,
-        alignItems: 'flex-start',
-      }}
-      onClick={p.onClick}
-    >
-      <Check on={p.active} round />
-      <div className="grow">
-        <div style={{ fontWeight: 700, fontSize: 17, color: p.active ? 'var(--accent)' : undefined }}>{p.title}</div>
-        <div className="muted" style={{ fontSize: 14, whiteSpace: 'normal' }}>
-          {p.desc}
-        </div>
+    <button className={cx('mode-opt', p.active && 'on')} disabled={p.disabled && !p.active} onClick={p.onClick}>
+      <span className={cx('tile', p.icon === 'wallet' ? 'tone-clay' : 'tone-blue')}>
+        <Icon name={p.icon} />
+      </span>
+      <div style={{ flex: 1 }}>
+        <div className="t">{p.title}</div>
+        <div className="d">{p.desc}</div>
       </div>
     </button>
   );
@@ -291,10 +272,7 @@ export function NotFound() {
     <>
       <AppBar title="找不到" back />
       <main className="page">
-        <div className="empty">
-          <div className="big">🤔</div>
-          <p>找不到這筆資料，可能已被刪除</p>
-        </div>
+        <Empty icon="receipt" title="找不到這筆資料" hint="可能已經被刪除了" />
       </main>
     </>
   );

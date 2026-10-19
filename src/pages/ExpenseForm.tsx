@@ -5,7 +5,8 @@ import { splitExpense } from '../core/split';
 import type { CategoryId, Expense, SplitSpec, TripMember } from '../core/types';
 import { validateExpense } from '../core/validate';
 import type { ExpenseError } from '../core/validate';
-import { AppBar, Avatar, Check, ConfirmSheet, MoneyInput, useToast } from '../components/ui';
+import { Icon } from '../components/icons';
+import { AppBar, Avatar, Check, ConfirmSheet, MoneyInput, Pill, Sq, useToast } from '../components/ui';
 import { goBack } from '../router';
 import { deleteExpense, upsertExpense } from '../store/actions';
 import { useStore } from '../store/AppStore';
@@ -145,11 +146,7 @@ function ExpenseFormInner({
         title={existing ? '編輯支出' : '新增支出'}
         back
         actions={
-          onDelete && (
-            <button className="icon-btn" aria-label="刪除" onClick={() => setConfirmDelete(true)}>
-              🗑️
-            </button>
-          )
+          onDelete && <Sq icon="trash" label="刪除" tone="rose" onClick={() => setConfirmDelete(true)} />
         }
       />
       <main className="page">
@@ -167,7 +164,9 @@ function ExpenseFormInner({
           <div className="cat-grid">
             {CATEGORIES.map((c) => (
               <button key={c.id} className={cx('cat-btn', categoryId === c.id && 'on')} onClick={() => setCategoryId(c.id)}>
-                <span className="ico">{c.icon}</span>
+                <span className={`tile tone-${c.tone}`}>
+                  <Icon name={c.id} size={20} />
+                </span>
                 {c.label}
               </button>
             ))}
@@ -178,7 +177,7 @@ function ExpenseFormInner({
             <div className="chips">
               {trip.mode === 'pool' && (
                 <button className={payerId === undefined ? 'chip on' : 'chip'} onClick={() => setPayerId(undefined)}>
-                  💰 公費
+                  <Icon name="wallet" size={18} /> 公費
                 </button>
               )}
               {members.map((m) => (
@@ -213,7 +212,7 @@ function ExpenseFormInner({
           </div>
 
           <div className="list">
-            <button className="split-row" style={{ width: '100%', background: 'var(--surface-2)', border: 0, minHeight: 52 }} onClick={setAll}>
+            <button className="split-row head" onClick={setAll}>
               <span className="who" style={{ fontSize: 15, padding: 0 }}>
                 <Check on={allOn} />
                 <span>{allOn ? '全部人分攤' : `${included.size} / ${members.length} 人分攤`}</span>
@@ -228,13 +227,13 @@ function ExpenseFormInner({
                 <div key={m.id} className={cx('split-row', !on && 'off')}>
                   <button className="who" onClick={() => toggle(m.id)}>
                     <Check on={on} />
-                    {splitType === 'equal' && <Avatar name={m.name} index={i} />}
+                        {splitType === 'equal' && <Avatar name={m.name} index={i} small />}
                     <span>{m.name}</span>
                   </button>
                   {splitType === 'shares' && on && (
                     <div className="stepper">
                       <button aria-label="減少份數" onClick={() => stepShare(m.id, -0.5)}>
-                        −
+                        <Icon name="down" size={18} />
                       </button>
                       <input
                         inputMode="decimal"
@@ -244,7 +243,7 @@ function ExpenseFormInner({
                         onFocus={(e) => e.target.select()}
                       />
                       <button aria-label="增加份數" onClick={() => stepShare(m.id, 0.5)}>
-                        ＋
+                        <Icon name="up" size={18} />
                       </button>
                     </div>
                   )}
@@ -309,9 +308,7 @@ function ExpenseFormInner({
         {errors.length > 0 && (touched || errors[0].field === 'split') && amount ? (
           <p className="hint neg">{errorText(errors[0])}</p>
         ) : null}
-        <button className="btn primary block lg" disabled={touched && errors.length > 0} onClick={save}>
-          {existing ? '儲存變更' : '新增支出'}
-        </button>
+        <Pill block label={existing ? '儲存變更' : '新增支出'} icon="check" disabled={touched && errors.length > 0} onClick={save} />
       </div>
 
       {confirmDelete && onDelete && (

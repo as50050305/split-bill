@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+import '@fontsource-variable/manrope/wght.css';
 import './index.css';
 import App from './App.tsx';
 

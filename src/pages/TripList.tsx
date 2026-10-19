@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { formatMoney, sum } from '../core/money';
 import type { Trip } from '../core/types';
-import { AppBar, BottomNav, ConfirmSheet, Fab, Sheet, useToast } from '../components/ui';
+import { Icon } from '../components/icons';
+import { AppBar, BottomNav, ConfirmSheet, Empty, Fab, Sheet, Sq, useToast } from '../components/ui';
 import { navigate } from '../router';
 import { deleteTrip } from '../store/actions';
 import { useStore } from '../store/AppStore';
@@ -16,16 +17,10 @@ export function TripList() {
 
   return (
     <>
-      <AppBar title="分帳本" />
+      <AppBar eyebrow="Split Bill" title="分帳本" />
       <main className="page">
         {trips.length === 0 ? (
-          <div className="empty">
-            <div className="big">🧳</div>
-            <p>還沒有旅程</p>
-            <p className="faint" style={{ fontSize: 14, marginTop: 4 }}>
-              按右下角「新增旅程」開始記帳
-            </p>
-          </div>
+          <Empty icon="suitcase" tone="sage" title="還沒有旅程" hint="按右下角「新增旅程」開始記帳" />
         ) : (
           <div className="stack">
             {trips.map((t) => {
@@ -38,28 +33,28 @@ export function TripList() {
                   tabIndex={0}
                   onClick={() => navigate({ name: 'trip', tripId: t.id, tab: 'expenses' })}
                 >
-                  <div className="trip-card-head">
+                  <span className={t.mode === 'pool' ? 'tile tone-clay' : 'tile tone-blue'}>
+                    <Icon name={t.mode === 'pool' ? 'wallet' : 'users'} />
+                  </span>
+                  <div className="grow">
                     <h3>{t.name}</h3>
-                    <button
-                      className="icon-btn"
-                      aria-label="更多"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMenuFor(t);
-                      }}
-                    >
-                      ⋯
-                    </button>
+                    <div className="meta">
+                      {t.mode === 'pool' ? '公費制' : '各自付款'} · {t.members.length} 人 · {t.members.map((m) => m.name).join('、')}
+                    </div>
+                    <div className="total">
+                      <small>NT$</small>
+                      {formatMoney(total)}
+                    </div>
                   </div>
-                  <div className="meta">
-                    <span className={t.mode === 'pool' ? 'badge accent' : 'badge'}>
-                      {t.mode === 'pool' ? '公費制' : '各自付款'}
-                    </span>
-                    <span>{t.members.length} 人</span>
-                    <span>·</span>
-                    <span>{t.members.map((m) => m.name).join('、')}</span>
-                  </div>
-                  <div className="total">NT$ {formatMoney(total)}</div>
+                  <Sq
+                    icon="more"
+                    label="更多"
+                    flat
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuFor(t);
+                    }}
+                  />
                 </div>
               );
             })}
@@ -72,25 +67,31 @@ export function TripList() {
       {menuFor && (
         <Sheet onClose={() => setMenuFor(null)}>
           <h2>{menuFor.name}</h2>
-          <div className="stack" style={{ marginTop: 16 }}>
+          <div className="stack" style={{ marginTop: 16, gap: 8 }}>
             <button
-              className="btn block lg"
+              className="menu-item"
               onClick={() => {
                 const id = menuFor.id;
                 setMenuFor(null);
                 navigate({ name: 'tripEdit', tripId: id });
               }}
             >
-              ✏️ 編輯旅程
+              <span className="tile tone-blue" style={{ width: 40, height: 40 }}>
+                <Icon name="edit" size={20} />
+              </span>
+              編輯旅程
             </button>
             <button
-              className="btn block lg danger"
+              className="menu-item"
               onClick={() => {
                 setConfirmDelete(menuFor);
                 setMenuFor(null);
               }}
             >
-              🗑️ 刪除旅程
+              <span className="tile tone-rose" style={{ width: 40, height: 40 }}>
+                <Icon name="trash" size={20} />
+              </span>
+              刪除旅程
             </button>
           </div>
         </Sheet>
