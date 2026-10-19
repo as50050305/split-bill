@@ -23,7 +23,7 @@ export function demoData(): AppData {
   };
   const all4: SplitSpec = { type: 'equal', participants: ['b0', 'b1', 'b2', 'b3'] };
   const e = (id: string, tripId: string, title: string, amount: number, categoryId: Expense['categoryId'], date: string, payerId: string | undefined, split: SplitSpec): Expense => ({
-    id, tripId, title, amount, categoryId, date, payerId, split, createdAt: now,
+    id, tripId, title, amount, categoryId, date, payers: payerId ? { [payerId]: amount } : {}, kind: 'expense', split, createdAt: now,
   });
 
   const japan: Trip = {
@@ -43,6 +43,8 @@ export function demoData(): AppData {
     e('x1', 'bbq', '烤肉食材', 1000, 'food', '2026-10-17', 'b0', all4),
     e('x2', 'bbq', '飲料冰塊', 500, 'food', '2026-10-17', 'b1', all4),
     e('x3', 'bbq', '高鐵票', 1490, 'transport', '2026-10-17', 'b2', { type: 'equal', participants: ['b2', 'b3'] }),
+    { ...e('x4', 'bbq', '桌菜', 4800, 'food', '2026-10-18', undefined, all4), payers: { b0: 2400, b1: 1400, b3: 1000 } },
+    { ...e('x5', 'bbq', '油錢補貼', 800, 'transport', '2026-10-18', undefined, { type: 'equal', participants: ['b1', 'b2', 'b3'] }), kind: 'subsidy', payers: { b0: 800 } },
     e('y1', 'jp', '溫泉旅館', 2400, 'lodging', '2026-10-12', undefined, all3),
     e('y2', 'jp', '一蘭拉麵', 870, 'food', '2026-10-13', undefined, { type: 'shares', shares: { j0: 1, j1: 1, j2: 1.5 } }),
     e('y3', 'jp', '藥妝店', 650, 'shopping', '2026-10-13', 'j1', { type: 'exact', amounts: { j1: 650 } }),

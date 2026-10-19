@@ -102,8 +102,11 @@ function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expens
     return `${all ? '全員' : `${n} 人`}${how}`;
   };
   const payerLabel = (e: Expense) => {
-    if (trip.mode === 'pool') return e.payerId ? `${name(e.payerId)} 代墊` : '公費';
-    return `${name(e.payerId!)} 付`;
+    const ids = trip.members.map((m) => m.id).filter((id) => (e.payers?.[id] ?? 0) > 0);
+    const who = ids.map(name).join('、');
+    if (e.kind === 'subsidy') return `補貼給 ${who}`;
+    if (trip.mode === 'pool') return ids.length ? `${who} 代墊` : '公費';
+    return ids.length > 1 ? `${who} 合付` : `${who} 付`;
   };
 
   return (

@@ -165,7 +165,7 @@ describe('結算', () => {
 
   it('模式二：沒有付款人不能存檔', () => {
     const errors = validateExpense(
-      { title: 'x', amount: 10, categoryId: 'food', date: '2026-10-19', split: { type: 'equal', participants: ['A'] } },
+      { title: 'x', amount: 10, categoryId: 'food', date: '2026-10-19', payers: {}, split: { type: 'equal', participants: ['A'] } },
       trip('individual', ['A']),
     );
     expect(errors).toEqual([{ field: 'payer', code: 'required' }]);
@@ -182,5 +182,97 @@ describe('金額工具', () => {
   it('formatMoney 加千分位', () => {
     expect(formatMoney(1234567)).toBe('1,234,567');
     expect(formatMoney(-375)).toBe('-375');
+  });
+});
+
+describe('多人付款與補貼', () => {
+  const all3 = { type: 'equal' as const, participants: ['A', 'B', 'C'] };
+
+  it('桌菜 3000：A 出 2000、B 出 1000，三人平分 → C 轉 A 1000', () => {
+    const s = computeTripSummary({
+      trip: trip('individual', ['A', 'B', 'C']),
+      expenses: [expense({ amount: 3000, payers: { A: 2000, B: 1000 }, split: all3 })],
+      contributions: [],
+      payments: [],
+    });
+    expect(s.balances.map((b) => b.paid)).toEqual([2000, 1000, 0]);
+    expect(s.transfers).toEqual([{ fromId: 'C', toId: 'A', amount: 1000 }]);
+  });
+
+  it('付款人金額總和不等於支出 → 不能存檔，並回報差額', () => {
+    const errors = validateExpense(
+      { title: '桌菜', amount: 3000, categoryId: 'food', date: '2026-10-19', payers: { A: 2000, B: 500 }, split: all3 },
+      trip('individual', ['A', 'B', 'C']),
+    );
+    expect(errors).toEqual([{ field: 'payer', code: 'mismatch', diff: 500 }]);
+  });
+
+  it('油錢補貼 900 給兩位開車的人（各 450），開車的人不分攤 → 乘客各轉 450', () => {
+    const s = computeTripSummary({
+      trip: trip('individual', ['A', 'B', 'C', 'D']),
+      expenses: [
+        expense({ amount: 900, kind: 'subsidy', payers: { A: 450, B: 450 }, split: { type: 'equal', participants: ['C', 'D'] } }),
+      ],
+      contributions: [],
+      payments: [],
+    });
+    expect(s.transfers).toEqual([
+      { fromId: 'C', toId: 'A', amount: 450 },
+      { fromId: 'D', toId: 'B', amount: 450 },
+    ]);
+  });
+
+  it('補貼一定要選收補貼的人（公費制也一樣）', () => {
+    const errors = validateExpense(
+      { title: '油錢', amount: 500, kind: 'subsidy', categoryId: 'transport', date: '2026-10-19', payers: {}, split: all3 },
+      trip('pool', ['A', 'B', 'C'], 'A'),
+    );
+    expect(errors).toEqual([{ field: 'payer', code: 'required' }]);
+  });
+
+  it('公費制：補貼給開車的 B，由保管人從公費結算給他', () => {
+    const s = computeTripSummary({
+      trip: trip('pool', ['A', 'B', 'C'], 'A'),
+      expenses: [expense({ amount: 600, kind: 'subsidy', payers: { B: 600 }, split: all3 })],
+      contributions: ['A', 'B', 'C'].map((id) => contribution(id, 1000)),
+      payments: [],
+    });
+    expect(s.poolBalance).toBe(3000);
+    // 每人應付 200；B 另外拿到 600 補貼
+    expect(s.transfers).toEqual([
+      { fromId: 'A', toId: 'B', amount: 1400 },
+      { fromId: 'A', toId: 'C', amount: 800 },
+    ]);
+  });
+
+  it('公費制：兩人合力代墊', () => {
+    const s = computeTripSummary({
+      trip: trip('pool', ['A', 'B', 'C'], 'A'),
+      expenses: [expense({ amount: 900, payers: { B: 500, C: 400 }, split: all3 })],
+      contributions: [],
+      payments: [],
+    });
+    expect(s.balances.map((b) => b.advanced)).toEqual([0, 500, 400]);
+    expect(s.transfers).toEqual([
+      { fromId: 'A', toId: 'B', amount: 200 },
+      { fromId: 'A', toId: 'C', amount: 100 },
+    ]);
+  });
+});
+
+describe('資料升級', () => {
+  it('舊版 payerId 自動轉成 payers', async () => {
+    const { migrate } = await import('../../data/migrations');
+    const d = migrate({
+      schemaVersion: 1,
+      expenses: [
+        { id: 'e1', amount: 300, payerId: 'A' },
+        { id: 'e2', amount: 100 },
+      ],
+    });
+    expect(d.schemaVersion).toBe(2);
+    expect(d.expenses[0]).toMatchObject({ payers: { A: 300 }, kind: 'expense' });
+    expect(d.expenses[0]).not.toHaveProperty('payerId');
+    expect(d.expenses[1]).toMatchObject({ payers: {} });
   });
 });

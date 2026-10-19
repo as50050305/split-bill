@@ -95,7 +95,7 @@ export function isTripMemberUsed(d: AppData, tripId: ID, memberId: ID): boolean 
   const { expenses, contributions, payments } = tripLedger(d, tripId);
   return (
     expenses.some((e) => {
-      if (e.payerId === memberId) return true;
+      if ((e.payers?.[memberId] ?? 0) > 0) return true;
       const s = e.split;
       if (s.type === 'equal') return s.participants.includes(memberId);
       if (s.type === 'shares') return (s.shares[memberId] ?? 0) > 0;

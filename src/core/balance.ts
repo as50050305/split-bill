@@ -58,11 +58,16 @@ export function computeTripSummary({ trip, expenses, contributions, payments }: 
     const shares = splitExpense(e.amount, e.split, order);
     for (const [id, v] of Object.entries(shares)) row(id).owed += v;
 
+    // 補貼（油錢）在計算上等同「收補貼的人先付了這筆」：他應該拿回這筆錢，大家依分攤方式出
+    const payers = Object.entries(e.payers ?? {}).filter(([, v]) => v > 0);
+    if (payers.length && sum(payers.map(([, v]) => v)) !== e.amount) {
+      throw new Error(`expense ${e.id} payers do not add up`);
+    }
     if (trip.mode === 'individual') {
-      if (!e.payerId) throw new Error(`expense ${e.id} has no payer`);
-      row(e.payerId).paid += e.amount;
-    } else if (e.payerId) {
-      row(e.payerId).advanced += e.amount; // 代墊：視為投入同額公費後由公費支出
+      if (!payers.length) throw new Error(`expense ${e.id} has no payer`);
+      for (const [id, v] of payers) row(id).paid += v;
+    } else if (payers.length) {
+      for (const [id, v] of payers) row(id).advanced += v; // 代墊：視為投入同額公費後由公費支出
     } else {
       poolSpent += e.amount;
     }

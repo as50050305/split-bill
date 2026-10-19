@@ -12,6 +12,8 @@ export type CurrencyCode = 'TWD';
 /** pool = 模式一 公費制；individual = 模式二 各自付款制 */
 export type TripMode = 'pool' | 'individual';
 
+export type ExpenseKind = 'expense' | 'subsidy';
+
 export type CategoryId = 'food' | 'transport' | 'lodging' | 'ticket' | 'shopping' | 'other';
 
 /** 分攤方式。沒出現在名單裡（或份數/金額為 0）的成員＝不分攤這一筆 */
@@ -60,10 +62,14 @@ export interface Expense {
   /** YYYY-MM-DD */
   date: string;
   /**
-   * 模式二：付款人（必填）。
-   * 模式一：留空＝從公費支出；有值＝這個人自掏腰包代墊（視為他投入同額公費再支出）。
+   * 誰出了這筆錢、各出多少（總和必須等於 amount）。可以多人（例如桌菜大家湊錢）。
+   * 模式二：至少一人。
+   * 模式一：空物件＝從公費支出；有人＝這些人自掏腰包代墊（視為他們投入同額公費再支出）。
+   * kind 為 subsidy 時，這裡代表「收到補貼的人」（例如開車的人）。
    */
-  payerId?: ID;
+  payers: Record<ID, Money>;
+  /** expense＝一般支出（預設）；subsidy＝補貼，例如油錢，沒有實際付款，錢直接給收補貼的人 */
+  kind?: ExpenseKind;
   split: SplitSpec;
   note?: string;
   createdAt: number;

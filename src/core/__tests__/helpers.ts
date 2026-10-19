@@ -16,7 +16,8 @@ export function trip(mode: TripMode, names: string[], custodianId?: string): Tri
   };
 }
 
-export function expense(p: Pick<Expense, 'amount' | 'split'> & Partial<Expense>): Expense {
+/** payerId 是測試用的簡寫：單一付款人付全額 */
+export function expense({ payerId, ...p }: Pick<Expense, 'amount' | 'split'> & Partial<Expense> & { payerId?: string }): Expense {
   return {
     id: nextId('e'),
     tripId: 't1',
@@ -24,6 +25,7 @@ export function expense(p: Pick<Expense, 'amount' | 'split'> & Partial<Expense>)
     categoryId: 'other',
     date: '2026-10-19',
     createdAt: 0,
+    payers: payerId ? { [payerId]: p.amount } : {},
     ...p,
   };
 }

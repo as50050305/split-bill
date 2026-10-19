@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { CATEGORIES, categoryOf } from '../core/categories';
 import { formatMoney, sum } from '../core/money';
-import { splitExpense } from '../core/split';
-import type { CategoryId, Expense, SplitSpec, TripMember } from '../core/types';
+import { splitEqual, splitExpense } from '../core/split';
+import type { CategoryId, Expense, ExpenseKind, SplitSpec, TripMember } from '../core/types';
 import { validateExpense } from '../core/validate';
 import type { ExpenseError } from '../core/validate';
 import { Icon } from '../components/icons';
@@ -29,7 +29,7 @@ export function ExpenseForm({ tripId, expenseId }: { tripId: string; expenseId?:
     update((d) => deleteExpense(d, existing.id));
     toast('已刪除支出');
     goBack();
-  } : undefined} lastPayerId={[...data.expenses].reverse().find((e) => e.tripId === tripId && e.payerId)?.payerId} />;
+  } : undefined} lastPayerId={Object.keys([...data.expenses].reverse().find((e) => e.tripId === tripId && Object.keys(e.payers ?? {}).length)?.payers ?? {})[0]} />;
 }
 
 function ExpenseFormInner({
@@ -53,9 +53,24 @@ function ExpenseFormInner({
   const [title, setTitle] = useState(existing?.title ?? '');
   const [categoryId, setCategoryId] = useState<CategoryId>(existing?.categoryId ?? 'food');
   const [date, setDate] = useState(existing?.date ?? today());
-  const [payerId, setPayerId] = useState<string | undefined>(
-    existing ? existing.payerId : trip.mode === 'individual' ? (lastPayerId && order.includes(lastPayerId) ? lastPayerId : order[0]) : undefined,
-  );
+  const [kind, setKind] = useState<ExpenseKind>(existing?.kind ?? 'expense');
+  // 付款人（補貼時＝收補貼的人），可多選；公費制不選＝公費支出
+  const [payerSel, setPayerSel] = useState<string[]>(() => {
+    if (existing) return order.filter((id) => (existing.payers?.[id] ?? 0) > 0);
+    if (trip.mode === 'pool') return [];
+    return [lastPayerId && order.includes(lastPayerId) ? lastPayerId : order[0]];
+  });
+  // 新增時預設帶入上一次的付款人；第一次點別人是「換人」，之後才是多選
+  const [payerAuto, setPayerAuto] = useState(!existing && trip.mode === 'individual');
+  const [payerAmt, setPayerAmt] = useState<Record<string, number | null>>(() => ({ ...(existing?.payers ?? {}) }));
+  // 多人付款時，使用者沒改過金額就自動平均分配
+  const [payerEdited, setPayerEdited] = useState<boolean>(() => {
+    if (!existing) return false;
+    const sel = order.filter((id) => (existing.payers?.[id] ?? 0) > 0);
+    if (sel.length < 2) return false;
+    const even = splitEqual(existing.amount, sel);
+    return sel.some((id) => even[id] !== existing.payers[id]);
+  });
   const [splitType, setSplitType] = useState<SplitType>(s?.type ?? 'equal');
   const [included, setIncluded] = useState<Set<string>>(() => {
     if (!s) return new Set(order);
@@ -81,8 +96,42 @@ function ExpenseFormInner({
     return { type: 'exact', amounts: Object.fromEntries(inc.map((id) => [id, exact[id] ?? 0])) };
   }, [order, included, splitType, shares, exact]);
 
-  const finalTitle = title.trim() || categoryOf(categoryId).label;
-  const draft = { title: finalTitle, amount: amount ?? 0, categoryId, date, payerId, split: spec };
+  const payerAmounts: Record<string, number | null> = useMemo(() => {
+    if (payerSel.length === 0) return {};
+    if (payerSel.length === 1) return { [payerSel[0]]: amount ?? 0 };
+    if (!payerEdited) return amount ? splitEqual(amount, payerSel) : Object.fromEntries(payerSel.map((id) => [id, null]));
+    return Object.fromEntries(payerSel.map((id) => [id, payerAmt[id] ?? null]));
+  }, [payerSel, payerEdited, payerAmt, amount]);
+  const payers: Record<string, number> = Object.fromEntries(payerSel.map((id) => [id, payerAmounts[id] ?? 0]));
+  const payerSum = sum(Object.values(payers));
+  const payerDiff = (amount ?? 0) - payerSum;
+
+  const togglePayer = (id: string) => {
+    setPayerEdited(false);
+    if (payerAuto) {
+      setPayerAuto(false);
+      setPayerSel([id]);
+      return;
+    }
+    setPayerSel((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : order.filter((x) => x === id || sel.includes(x))));
+  };
+  const editPayerAmount = (id: string, v: number | null) => {
+    setPayerAmt({ ...payerAmounts, [id]: v });
+    setPayerEdited(true);
+  };
+  const chooseKind = (k: ExpenseKind) => {
+    setKind(k);
+    // 補貼要明確選人，不沿用預設付款人
+    if (k === 'subsidy' && payerAuto) {
+      setPayerSel([]);
+      setPayerAuto(false);
+    }
+    if (k === 'subsidy' && !existing && categoryId === 'food') setCategoryId('transport');
+  };
+
+  const isSubsidy = kind === 'subsidy';
+  const finalTitle = title.trim() || (isSubsidy ? `${categoryOf(categoryId).label}補貼` : categoryOf(categoryId).label);
+  const draft = { title: finalTitle, amount: amount ?? 0, categoryId, date, payers, kind, split: spec };
   const errors = validateExpense(draft, trip);
   const preview: Record<string, number> = useMemo(() => {
     try {
@@ -131,7 +180,8 @@ function ExpenseFormInner({
       amount: amount!,
       categoryId,
       date,
-      payerId,
+      payers,
+      kind,
       split: spec,
       note: existing?.note,
       createdAt: existing?.createdAt ?? Date.now(),
@@ -157,7 +207,7 @@ function ExpenseFormInner({
             className="input"
             value={title}
             maxLength={40}
-            placeholder={`項目名稱（空白則用「${categoryOf(categoryId).label}」）`}
+            placeholder={`項目名稱（空白則用「${isSubsidy ? `${categoryOf(categoryId).label}補貼` : categoryOf(categoryId).label}」）`}
             onChange={(e) => setTitle(e.target.value)}
           />
 
@@ -173,24 +223,82 @@ function ExpenseFormInner({
           </div>
 
           <div className="field">
-            <span className="field-label">{trip.mode === 'pool' ? '誰付的' : '付款人'}</span>
+            <span className="field-label">類型</span>
+            <div className="seg">
+              <button className={!isSubsidy ? 'active' : ''} onClick={() => chooseKind('expense')}>
+                一般支出
+              </button>
+              <button className={isSubsidy ? 'active' : ''} onClick={() => chooseKind('subsidy')}>
+                補貼（油錢等）
+              </button>
+            </div>
+          </div>
+
+          <div className="field">
+            <span className="field-label">
+              {isSubsidy ? '補貼給誰（可多選）' : trip.mode === 'pool' ? '誰付的（可多人代墊）' : '付款人（可多選）'}
+            </span>
             <div className="chips">
-              {trip.mode === 'pool' && (
-                <button className={payerId === undefined ? 'chip on' : 'chip'} onClick={() => setPayerId(undefined)}>
+              {trip.mode === 'pool' && !isSubsidy && (
+                <button
+                  className={payerSel.length === 0 ? 'chip on' : 'chip'}
+                  onClick={() => {
+                    setPayerSel([]);
+                    setPayerEdited(false);
+                    setPayerAuto(false);
+                  }}
+                >
                   <Icon name="wallet" size={18} /> 公費
                 </button>
               )}
-              {members.map((m) => (
-                <button key={m.id} className={payerId === m.id ? 'chip on' : 'chip'} onClick={() => setPayerId(m.id)}>
-                  {m.name}
-                  {trip.mode === 'pool' && payerId === m.id && ' 代墊'}
-                </button>
-              ))}
+              {members.map((m) => {
+                const on = payerSel.includes(m.id);
+                return (
+                  <button key={m.id} className={on ? 'chip on' : 'chip'} onClick={() => togglePayer(m.id)}>
+                    {on && <Icon name="check" size={16} />}
+                    {m.name}
+                  </button>
+                );
+              })}
             </div>
-            {trip.mode === 'pool' && payerId && (
+            {payerSel.length > 1 && (
+              <div className="list" style={{ marginTop: 4 }}>
+                {payerSel.map((id) => (
+                  <div key={id} className="split-row">
+                    <span className="who" style={{ padding: 0 }}>
+                      <Avatar name={nameOf(id)} index={order.indexOf(id)} small />
+                      <span>{nameOf(id)}</span>
+                    </span>
+                    <div style={{ width: 140 }}>
+                      <MoneyInput size="sm" value={payerAmounts[id] ?? null} ariaLabel={`${nameOf(id)} 出的金額`} onChange={(v) => editPayerAmount(id, v)} />
+                    </div>
+                  </div>
+                ))}
+                <div className={cx('split-footer', payerDiff !== 0 && !!amount && 'bad')}>
+                  <span>
+                    {isSubsidy ? '已分配' : '已出'} {formatMoney(payerSum)} / {formatMoney(amount ?? 0)}
+                  </span>
+                  {payerEdited ? (
+                    <button className="link-btn" style={{ padding: 0, background: 'none', border: 0, fontWeight: 700, color: 'inherit', textDecoration: 'underline' }} onClick={() => setPayerEdited(false)}>
+                      改回平均
+                    </button>
+                  ) : (
+                    <span className="muted">自動平均，可直接修改</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {isSubsidy ? (
               <p className="faint" style={{ fontSize: 13, paddingLeft: 4 }}>
-                {nameOf(payerId)} 自掏腰包代墊，結算時會算成他多投入了這筆公費
+                補貼不是實際付款：結算時收補貼的人會拿到這筆錢，由下方分攤的人出。開車的人如果不用出，在分攤裡把他點掉。
               </p>
+            ) : (
+              trip.mode === 'pool' &&
+              payerSel.length > 0 && (
+                <p className="faint" style={{ fontSize: 13, paddingLeft: 4 }}>
+                  {payerSel.map(nameOf).join('、')} 自掏腰包代墊，結算時會算成多投入了這筆公費
+                </p>
+              )
             )}
           </div>
 
@@ -305,8 +413,8 @@ function ExpenseFormInner({
       </main>
 
       <div className="sticky-actions">
-        {errors.length > 0 && (touched || errors[0].field === 'split') && amount ? (
-          <p className="hint neg">{errorText(errors[0])}</p>
+        {errors.length > 0 && (touched || errors[0].field === 'split' || (errors[0].field === 'payer' && errors[0].code === 'mismatch')) && amount ? (
+          <p className="hint neg">{errorText(errors[0], isSubsidy)}</p>
         ) : null}
         <Pill block label={existing ? '儲存變更' : '新增支出'} icon="check" disabled={touched && errors.length > 0} onClick={save} />
       </div>
@@ -325,7 +433,7 @@ function ExpenseFormInner({
   );
 }
 
-function errorText(e: ExpenseError): string {
+function errorText(e: ExpenseError, isSubsidy: boolean): string {
   switch (e.field) {
     case 'title':
       return '請輸入項目名稱';
@@ -334,7 +442,9 @@ function errorText(e: ExpenseError): string {
     case 'date':
       return '請選擇日期';
     case 'payer':
-      return '請選擇付款人';
+      if (e.code === 'mismatch') return e.diff > 0 ? `${isSubsidy ? '補貼分配' : '付款金額'}還差 ${formatMoney(e.diff)} 元` : `${isSubsidy ? '補貼分配' : '付款金額'}超出 ${formatMoney(-e.diff)} 元`;
+      if (e.code === 'invalid') return '每個人的金額都要大於 0';
+      return isSubsidy ? '請選擇補貼給誰' : '請選擇付款人';
     case 'split': {
       const d = e.detail;
       if (d.reason === 'exactMismatch') return d.diff > 0 ? `指定金額還差 ${formatMoney(d.diff)} 元` : `指定金額超出 ${formatMoney(-d.diff)} 元`;
