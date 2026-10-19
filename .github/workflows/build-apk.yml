@@ -23,7 +23,9 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # GitHub 的 ubuntu 機器已內建 Android SDK，只需接受授權；缺少的 SDK 版本 Gradle 會自動下載
+      - name: 接受 Android SDK 授權
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: 安裝套件
         run: npm ci
