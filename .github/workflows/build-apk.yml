@@ -1,0 +1,59 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 安裝套件
+        run: npm ci
+
+      - name: 計算邏輯測試（失敗就不打包）
+        run: npm test
+
+      - name: 建置網頁
+        run: npm run build
+
+      - name: 同步到 Android 專案
+        run: npx cap sync android
+
+      - name: 打包 APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mkdir -p ../out
+          cp app/build/outputs/apk/release/app-release.apk "../out/split-bill-v1.0.${{ github.run_number }}.apk"
+
+      - name: 上傳 APK（Actions 頁面下載）
+        uses: actions/upload-artifact@v4
+        with:
+          name: split-bill-apk
+          path: out/*.apk
+
+      - name: 發佈到 Releases（手機可直接下載）
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: 分帳本 v1.0.${{ github.run_number }}
+          files: out/*.apk

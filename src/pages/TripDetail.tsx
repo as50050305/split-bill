@@ -1,0 +1,413 @@
+import { useMemo, useState } from 'react';
+import { computeTripSummary } from '../core/balance';
+import type { TripSummary } from '../core/balance';
+import { categoryOf } from '../core/categories';
+import { formatMoney, sum } from '../core/money';
+import type { Contribution, Expense, Payment, Transfer, Trip } from '../core/types';
+import { AppBar, Avatar, Check, ConfirmSheet, Fab, Money, Sheet, useToast } from '../components/ui';
+import { navigate } from '../router';
+import { drawSettlementImage } from '../share/settlementImage';
+import { shareImage } from '../share/shareImage';
+import { addPayment, deleteContribution, deletePayment, tripLedger } from '../store/actions';
+import { useStore } from '../store/AppStore';
+import { formatDate, newId, today } from '../utils';
+import { NotFound } from './TripForm';
+
+type Tab = 'expenses' | 'pool' | 'settle';
+
+export function TripDetail({ tripId, tab }: { tripId: string; tab: Tab }) {
+  const { data } = useStore();
+  const trip = data.trips.find((t) => t.id === tripId);
+  const ledger = useMemo(() => tripLedger(data, tripId), [data, tripId]);
+  const summary = useMemo(() => {
+    if (!trip) return null;
+    try {
+      return computeTripSummary({ trip, ...ledger });
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }, [trip, ledger]);
+
+  if (!trip) return <NotFound />;
+  const activeTab: Tab = tab === 'pool' && trip.mode !== 'pool' ? 'expenses' : tab;
+  const go = (t: Tab) => navigate({ name: 'trip', tripId, tab: t }, { replace: true });
+  const tabs: [Tab, string][] =
+    trip.mode === 'pool'
+      ? [
+          ['expenses', '支出'],
+          ['pool', '公費'],
+          ['settle', '結算'],
+        ]
+      : [
+          ['expenses', '支出'],
+          ['settle', '結算'],
+        ];
+
+  return (
+    <>
+      <AppBar
+        title={trip.name}
+        back={{ name: 'trips' }}
+        actions={
+          <button className="icon-btn" aria-label="編輯旅程" onClick={() => navigate({ name: 'tripEdit', tripId })}>
+            ⚙️
+          </button>
+        }
+      >
+        <div className="tabs">
+          {tabs.map(([k, label]) => (
+            <button key={k} className={activeTab === k ? 'tab active' : 'tab'} onClick={() => go(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </AppBar>
+      <main className="page with-tabs">
+        {!summary ? (
+          <div className="empty">資料有誤，無法計算。請檢查最近修改的支出。</div>
+        ) : activeTab === 'expenses' ? (
+          <ExpensesTab trip={trip} expenses={ledger.expenses} summary={summary} />
+        ) : activeTab === 'pool' ? (
+          <PoolTab trip={trip} contributions={ledger.contributions} summary={summary} />
+        ) : (
+          <SettleTab trip={trip} summary={summary} payments={ledger.payments} expenses={ledger.expenses} />
+        )}
+      </main>
+      {activeTab === 'expenses' && <Fab noNav label="記一筆" onClick={() => navigate({ name: 'expenseNew', tripId })} />}
+      {activeTab === 'pool' && <Fab noNav label="投入公費" onClick={() => navigate({ name: 'contributionNew', tripId })} />}
+    </>
+  );
+}
+
+// ── 支出 ──────────────────────────────────
+function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expense[]; summary: TripSummary }) {
+  const name = (id: string) => trip.members.find((m) => m.id === id)?.name ?? '?';
+  const byDate = useMemo(() => {
+    const sorted = [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+    const groups: { date: string; items: Expense[] }[] = [];
+    for (const e of sorted) {
+      const g = groups[groups.length - 1];
+      if (g && g.date === e.date) g.items.push(e);
+      else groups.push({ date: e.date, items: [e] });
+    }
+    return groups;
+  }, [expenses]);
+
+  const splitLabel = (e: Expense) => {
+    const s = e.split;
+    const n = s.type === 'equal' ? s.participants.length : Object.values(s.type === 'shares' ? s.shares : s.amounts).filter((v) => v > 0).length;
+    const how = s.type === 'equal' ? '平分' : s.type === 'shares' ? '按份數' : '指定金額';
+    const all = n === trip.members.length;
+    return `${all ? '全員' : `${n} 人`}${how}`;
+  };
+  const payerLabel = (e: Expense) => {
+    if (trip.mode === 'pool') return e.payerId ? `${name(e.payerId)} 代墊` : '公費';
+    return `${name(e.payerId!)} 付`;
+  };
+
+  return (
+    <>
+      <div className="card hero">
+        {trip.mode === 'pool' ? (
+          <>
+            <div className="label">公費餘額</div>
+            <div className={summary.poolBalance < 0 ? 'value neg' : 'value'}>NT$ {formatMoney(summary.poolBalance)}</div>
+            <div className="hero-grid">
+              <div>
+                <div className="label">總支出</div>
+                <div className="value">{formatMoney(summary.totalExpense)}</div>
+              </div>
+              <div>
+                <div className="label">已投入</div>
+                <div className="value">{formatMoney(summary.totalContributed)}</div>
+              </div>
+            </div>
+            {summary.poolBalance < 0 && (
+              <p className="neg" style={{ fontSize: 14, marginTop: 10 }}>
+                公費不夠了！請到「公費」分頁投入，或把支出標成某人代墊。
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="label">總支出</div>
+            <div className="value">NT$ {formatMoney(summary.totalExpense)}</div>
+            <div className="hero-grid">
+              <div>
+                <div className="label">筆數</div>
+                <div className="value">{expenses.length}</div>
+              </div>
+              <div>
+                <div className="label">人均</div>
+                <div className="value">{formatMoney(Math.round(summary.totalExpense / trip.members.length))}</div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {byDate.length === 0 ? (
+        <div className="empty">
+          <div className="big">🧾</div>
+          <p>還沒有支出</p>
+          <p className="faint" style={{ fontSize: 14, marginTop: 4 }}>
+            按右下角「記一筆」新增
+          </p>
+        </div>
+      ) : (
+        byDate.map((g) => (
+          <section key={g.date}>
+            <div className="section-title stat">
+              <span>{formatDate(g.date)}</span>
+              <span className="num">{formatMoney(sum(g.items.map((e) => e.amount)))}</span>
+            </div>
+            <div className="list">
+              {g.items.map((e) => (
+                <button key={e.id} className="row" onClick={() => navigate({ name: 'expenseEdit', tripId: trip.id, expenseId: e.id })}>
+                  <span className="cat-icon">{categoryOf(e.categoryId).icon}</span>
+                  <div className="grow">
+                    <div className="title">{e.title}</div>
+                    <div className="sub">
+                      {payerLabel(e)} · {splitLabel(e)}
+                    </div>
+                  </div>
+                  <span className="amount">{formatMoney(e.amount)}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+    </>
+  );
+}
+
+// ── 公費 ──────────────────────────────────
+function PoolTab({ trip, contributions, summary }: { trip: Trip; contributions: Contribution[]; summary: TripSummary }) {
+  const { update } = useStore();
+  const [deleting, setDeleting] = useState<Contribution | null>(null);
+  const name = (id: string) => trip.members.find((m) => m.id === id)?.name ?? '?';
+  const sorted = [...contributions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+
+  return (
+    <>
+      <div className="card hero">
+        <div className="label">公費餘額（在 {trip.custodianId ? name(trip.custodianId) : '保管人'} 手上）</div>
+        <div className={summary.poolBalance < 0 ? 'value neg' : 'value'}>NT$ {formatMoney(summary.poolBalance)}</div>
+        <div className="hero-grid">
+          <div>
+            <div className="label">已投入</div>
+            <div className="value">{formatMoney(summary.totalContributed)}</div>
+          </div>
+          <div>
+            <div className="label">公費支出</div>
+            <div className="value">{formatMoney(summary.totalContributed - summary.poolBalance)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="section-title">每人投入</div>
+      <div className="list">
+        {summary.balances.map((b, i) => (
+          <div className="row" key={b.memberId}>
+            <Avatar name={name(b.memberId)} index={i} />
+            <div className="grow">
+              <div className="title">
+                {name(b.memberId)}
+                {b.memberId === trip.custodianId && ' 💰'}
+              </div>
+              {b.advanced > 0 && <div className="sub">另代墊 {formatMoney(b.advanced)}</div>}
+            </div>
+            <span className="amount">{formatMoney(b.contributed)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="section-title">投入紀錄</div>
+      {sorted.length === 0 ? (
+        <div className="empty" style={{ padding: 24 }}>
+          還沒有投入紀錄
+        </div>
+      ) : (
+        <div className="list">
+          {sorted.map((c) => (
+            <div className="row" key={c.id}>
+              <div className="grow">
+                <div className="title">{name(c.memberId)} 投入</div>
+                <div className="sub">{formatDate(c.date)}</div>
+              </div>
+              <span className="amount">{formatMoney(c.amount)}</span>
+              <button className="icon-btn" aria-label="刪除" onClick={() => setDeleting(c)}>
+                🗑️
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {deleting && (
+        <ConfirmSheet
+          title="刪除這筆投入？"
+          body={`${name(deleting.memberId)} 投入 NT$ ${formatMoney(deleting.amount)}`}
+          confirmLabel="刪除"
+          danger
+          onConfirm={() => update((d) => deleteContribution(d, deleting.id))}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── 結算 ──────────────────────────────────
+function SettleTab({ trip, summary, payments, expenses }: { trip: Trip; summary: TripSummary; payments: Payment[]; expenses: Expense[] }) {
+  const { update } = useStore();
+  const toast = useToast();
+  const [image, setImage] = useState<string | null>(null);
+  const [undo, setUndo] = useState<Payment | null>(null);
+  const name = (id: string) => trip.members.find((m) => m.id === id)?.name ?? '?';
+  const idx = (id: string) => trip.members.findIndex((m) => m.id === id);
+  const isPool = trip.mode === 'pool';
+
+  const markPaid = (t: Transfer) => {
+    update((d) => addPayment(d, { id: newId(), tripId: trip.id, fromId: t.fromId, toId: t.toId, amount: t.amount, date: today(), createdAt: Date.now() }));
+    toast(`已標記 ${name(t.fromId)} → ${name(t.toId)} 還款`);
+  };
+
+  const dates = expenses.map((e) => e.date).sort();
+  const dateRange = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} ~ ${dates[dates.length - 1]}`).replaceAll('-', '/') : undefined;
+
+  const makeImage = () => {
+    try {
+      setImage(drawSettlementImage({ trip, summary, payments, dateRange }));
+    } catch (e) {
+      toast('產生圖片失敗');
+      console.error(e);
+    }
+  };
+
+  const share = async () => {
+    if (!image) return;
+    try {
+      const r = await shareImage(image, `${trip.name} 結算`);
+      if (r === 'downloaded') toast('已下載圖片');
+    } catch (e) {
+      toast('分享失敗');
+      console.error(e);
+    }
+  };
+
+  const custodianRow = isPool ? summary.balances.find((b) => b.memberId === trip.custodianId) : undefined;
+
+  return (
+    <>
+      <div className="section-title">每人收支</div>
+      <div className="list">
+        <table className="bal-table">
+          <thead>
+            <tr>
+              <th>成員</th>
+              <th>{isPool ? '投入' : '已付'}</th>
+              <th>應付</th>
+              <th>淨額</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.balances.map((b) => (
+              <tr key={b.memberId}>
+                <td>
+                  {name(b.memberId)}
+                  {isPool && b.memberId === trip.custodianId && ' 💰'}
+                </td>
+                <td>{formatMoney(b.paid)}</td>
+                <td>{formatMoney(b.owed)}</td>
+                <td>
+                  <Money value={b.net} signed />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="note">
+        淨額＝{isPool ? '投入（含代墊）' : '已付'} − 應付。正數代表該拿回錢，負數代表要再付錢。
+      </p>
+
+      <div className="section-title">轉帳清單{isPool && '（都透過保管人）'}</div>
+      <div className="list">
+        {summary.transfers.length === 0 && payments.length === 0 && (
+          <div className="all-clear">
+            <div className="big">🎉</div>
+            <p>{expenses.length ? '不需要轉帳，大家剛好打平' : '還沒有支出'}</p>
+          </div>
+        )}
+        {summary.transfers.map((t, i) => (
+          <button key={`t${i}`} className="transfer" onClick={() => markPaid(t)}>
+            <Check on={false} />
+            <span className="flow">
+              <Avatar name={name(t.fromId)} index={idx(t.fromId)} />
+              {name(t.fromId)}
+              <span className="arrow">→</span>
+              <Avatar name={name(t.toId)} index={idx(t.toId)} />
+              {name(t.toId)}
+            </span>
+            <span className="amount num" style={{ fontWeight: 800, fontSize: 18, color: 'var(--accent)' }}>
+              {formatMoney(t.amount)}
+            </span>
+          </button>
+        ))}
+        {payments.map((p) => (
+          <button key={p.id} className="transfer done" onClick={() => setUndo(p)}>
+            <Check on />
+            <span className="flow">
+              {name(p.fromId)}
+              <span className="arrow">→</span>
+              {name(p.toId)}
+            </span>
+            <span className="amount num" style={{ fontWeight: 700 }}>
+              {formatMoney(p.amount)}
+            </span>
+          </button>
+        ))}
+      </div>
+      {summary.transfers.length > 0 && <p className="note">還完錢後點一下該筆，標記為「已還款」。</p>}
+      {isPool && custodianRow && trip.custodianId && (
+        <p className="note">
+          公費餘額 NT$ {formatMoney(summary.poolBalance)} 在保管人 {name(trip.custodianId)} 手上
+          {custodianRow.net > 0 && `，其中 ${formatMoney(custodianRow.net)} 是他自己的，不用轉帳`}。
+        </p>
+      )}
+
+      <div style={{ marginTop: 20 }}>
+        <button className="btn primary block lg" disabled={expenses.length === 0} onClick={makeImage}>
+          🖼️ 產生結算圖片
+        </button>
+      </div>
+
+      {image && (
+        <Sheet onClose={() => setImage(null)}>
+          <h2>結算圖片</h2>
+          <img className="preview-img" src={image} alt="結算圖片預覽" style={{ marginTop: 12 }} />
+          <div className="btn-row">
+            <button className="btn ghost lg" onClick={() => setImage(null)}>
+              關閉
+            </button>
+            <button className="btn primary lg" onClick={share}>
+              分享（LINE）
+            </button>
+          </div>
+        </Sheet>
+      )}
+      {undo && (
+        <ConfirmSheet
+          title="取消這筆還款標記？"
+          body={`${name(undo.fromId)} → ${name(undo.toId)} NT$ ${formatMoney(undo.amount)}`}
+          confirmLabel="取消標記"
+          danger
+          onConfirm={() => update((d) => deletePayment(d, undo.id))}
+          onClose={() => setUndo(null)}
+        />
+      )}
+    </>
+  );
+}
