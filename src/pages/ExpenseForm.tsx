@@ -26,8 +26,9 @@ export function ExpenseForm({ tripId, expenseId }: { tripId: string; expenseId?:
     toast(existing ? '已更新支出' : '已新增支出');
     goBack();
   }} onDelete={existing ? () => {
-    update((d) => deleteExpense(d, existing.id));
-    toast('已刪除支出');
+    const snapshot = existing;
+    update((d) => deleteExpense(d, snapshot.id));
+    toast(`已刪除「${snapshot.title}」`, { label: '復原', onClick: () => update((d) => upsertExpense(d, snapshot)) });
     goBack();
   } : undefined} lastPayerId={Object.keys([...data.expenses].reverse().find((e) => e.tripId === tripId && Object.keys(e.payers ?? {}).length)?.payers ?? {})[0]} />;
 }
@@ -409,6 +410,12 @@ function ExpenseFormInner({
             <label htmlFor="date">日期</label>
             <input id="date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
+
+          {onDelete && (
+            <button className="danger-link" onClick={() => setConfirmDelete(true)}>
+              <Icon name="trash" size={18} /> 刪除這筆支出
+            </button>
+          )}
         </div>
       </main>
 
@@ -422,7 +429,7 @@ function ExpenseFormInner({
       {confirmDelete && onDelete && (
         <ConfirmSheet
           title="刪除這筆支出？"
-          body={`${finalTitle} NT$ ${formatMoney(amount ?? 0)}`}
+          body={`${existing?.title ?? finalTitle} NT$ ${formatMoney(existing?.amount ?? amount ?? 0)}。刪錯了可以按「復原」。`}
           confirmLabel="刪除"
           danger
           onConfirm={onDelete}

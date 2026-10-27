@@ -294,20 +294,41 @@ export function PromptSheet({
 }
 
 // ── Toast ─────────────────────────────────
-const ToastCtx = createContext<(msg: string) => void>(() => {});
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+type ShowToast = (msg: string, action?: ToastAction) => void;
+const ToastCtx = createContext<ShowToast>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [msg, setMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; action?: ToastAction } | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const show = useCallback((m: string) => {
-    setMsg(m);
+  const show = useCallback<ShowToast>((msg, action) => {
+    setToast({ msg, action });
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setMsg(null), 2200);
+    // 有「復原」按鈕時多留一點時間
+    timer.current = window.setTimeout(() => setToast(null), action ? 5000 : 2200);
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <ToastCtx.Provider value={show}>
       {children}
-      {msg && <div className="toast">{msg}</div>}
+      {toast && (
+        <div className={cx('toast', toast.action && 'with-action')} role="status">
+          <span>{toast.msg}</span>
+          {toast.action && (
+            <button
+              className="toast-action"
+              onClick={() => {
+                toast.action!.onClick();
+                setToast(null);
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
+        </div>
+      )}
     </ToastCtx.Provider>
   );
 }

@@ -9,7 +9,7 @@ import { AppBar, Avatar, Check, ConfirmSheet, Empty, Fab, Money, Pill, Sheet, Sq
 import { navigate } from '../router';
 import { drawSettlementImage } from '../share/settlementImage';
 import { shareImage } from '../share/shareImage';
-import { addPayment, deleteContribution, deletePayment, tripLedger, upsertTrip } from '../store/actions';
+import { addContributions, addPayment, deleteContribution, deleteExpense, deletePayment, tripLedger, upsertExpense, upsertTrip } from '../store/actions';
 import { useStore } from '../store/AppStore';
 import { formatDate, newId, today } from '../utils';
 import { NotFound } from './TripForm';
@@ -82,6 +82,14 @@ export function TripDetail({ tripId, tab }: { tripId: string; tab: Tab }) {
 
 // ── 支出 ──────────────────────────────────
 function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expense[]; summary: TripSummary }) {
+  const { update } = useStore();
+  const toast = useToast();
+  const [menuFor, setMenuFor] = useState<Expense | null>(null);
+  const [confirmDel, setConfirmDel] = useState<Expense | null>(null);
+  const removeExpense = (e: Expense) => {
+    update((d) => deleteExpense(d, e.id));
+    toast(`已刪除「${e.title}」`, { label: '復原', onClick: () => update((d) => upsertExpense(d, e)) });
+  };
   const name = (id: string) => trip.members.find((m) => m.id === id)?.name ?? '?';
   const byDate = useMemo(() => {
     const sorted = [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
@@ -165,22 +173,71 @@ function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expens
             </div>
             <div className="list">
               {g.items.map((e) => (
-                <button key={e.id} className="row" onClick={() => navigate({ name: 'expenseEdit', tripId: trip.id, expenseId: e.id })}>
-                  <span className={`tile tone-${categoryOf(e.categoryId).tone}`}>
-                    <Icon name={e.categoryId} />
-                  </span>
-                  <div className="grow">
-                    <div className="title">{e.title}</div>
-                    <div className="sub">
-                      {payerLabel(e)} · {splitLabel(e)}
+                <div key={e.id} className="row-wrap">
+                  <button className="row" onClick={() => navigate({ name: 'expenseEdit', tripId: trip.id, expenseId: e.id })}>
+                    <span className={`tile tone-${categoryOf(e.categoryId).tone}`}>
+                      <Icon name={e.categoryId} />
+                    </span>
+                    <div className="grow">
+                      <div className="title">{e.title}</div>
+                      <div className="sub">
+                        {payerLabel(e)} · {splitLabel(e)}
+                      </div>
                     </div>
-                  </div>
-                  <span className="amount">{formatMoney(e.amount)}</span>
-                </button>
+                    <span className="amount">{formatMoney(e.amount)}</span>
+                  </button>
+                  <Sq icon="more" label={`${e.title} 更多動作`} flat small onClick={() => setMenuFor(e)} />
+                </div>
               ))}
             </div>
           </section>
         ))
+      )}
+
+      {menuFor && (
+        <Sheet onClose={() => setMenuFor(null)}>
+          <h2>{menuFor.title}</h2>
+          <p className="body num" style={{ marginBottom: 12 }}>
+            NT$ {formatMoney(menuFor.amount)} · {payerLabel(menuFor)}
+          </p>
+          <div className="stack" style={{ gap: 8 }}>
+            <button
+              className="menu-item"
+              onClick={() => {
+                const id = menuFor.id;
+                setMenuFor(null);
+                navigate({ name: 'expenseEdit', tripId: trip.id, expenseId: id });
+              }}
+            >
+              <span className="tile tone-blue" style={{ width: 40, height: 40 }}>
+                <Icon name="edit" size={20} />
+              </span>
+              編輯（改付款人、金額、分攤）
+            </button>
+            <button
+              className="menu-item"
+              onClick={() => {
+                setConfirmDel(menuFor);
+                setMenuFor(null);
+              }}
+            >
+              <span className="tile tone-rose" style={{ width: 40, height: 40 }}>
+                <Icon name="trash" size={20} />
+              </span>
+              刪除這筆
+            </button>
+          </div>
+        </Sheet>
+      )}
+      {confirmDel && (
+        <ConfirmSheet
+          title={`刪除「${confirmDel.title}」？`}
+          body={`NT$ ${formatMoney(confirmDel.amount)}，刪除後結算會重新計算。刪錯了可以按「復原」。`}
+          confirmLabel="刪除"
+          danger
+          onConfirm={() => removeExpense(confirmDel)}
+          onClose={() => setConfirmDel(null)}
+        />
       )}
     </>
   );
@@ -189,6 +246,7 @@ function ExpensesTab({ trip, expenses, summary }: { trip: Trip; expenses: Expens
 // ── 公費 ──────────────────────────────────
 function PoolTab({ trip, contributions, summary }: { trip: Trip; contributions: Contribution[]; summary: TripSummary }) {
   const { update } = useStore();
+  const toast = useToast();
   const [deleting, setDeleting] = useState<Contribution | null>(null);
   const name = (id: string) => trip.members.find((m) => m.id === id)?.name ?? '?';
   const sorted = [...contributions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
@@ -255,7 +313,11 @@ function PoolTab({ trip, contributions, summary }: { trip: Trip; contributions: 
           body={`${name(deleting.memberId)} 投入 NT$ ${formatMoney(deleting.amount)}`}
           confirmLabel="刪除"
           danger
-          onConfirm={() => update((d) => deleteContribution(d, deleting.id))}
+          onConfirm={() => {
+            const c = deleting;
+            update((d) => deleteContribution(d, c.id));
+            toast(`已刪除 ${name(c.memberId)} 的投入`, { label: '復原', onClick: () => update((d) => addContributions(d, [c])) });
+          }}
           onClose={() => setDeleting(null)}
         />
       )}
